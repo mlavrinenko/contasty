@@ -25,6 +25,16 @@ const ELIDE_QUERY: &str = r"
 (function_item body: (block) @elide)
 ";
 
+/// Captures `const_item` value expressions for elision.
+const CONST_ELIDE_QUERY: &str = r"
+(const_item value: (_) @elide)
+";
+
+/// Captures `static_item` value expressions for elision.
+const STATIC_ELIDE_QUERY: &str = r"
+(static_item value: (_) @elide)
+";
+
 /// Matches any `#[test]` or `#[cfg(test)]` `attribute_item`. The splicer walks
 /// the AST from the captured attribute to absorb adjacent attribute siblings
 /// and the item they decorate — so `#[cfg(test)] #[allow(...)] mod tests {}`
@@ -55,6 +65,8 @@ const COMMENT_QUERY: &str = r"
 pub fn language() -> Result<Language, AppError> {
     let grammar = tree_sitter_rust::language();
     let elide_query = Query::new(grammar, ELIDE_QUERY)?;
+    let const_elide_query = Some(Query::new(grammar, CONST_ELIDE_QUERY)?);
+    let static_elide_query = Some(Query::new(grammar, STATIC_ELIDE_QUERY)?);
     let test_query = Query::new(grammar, TEST_QUERY)?;
     let comment_query = Query::new(grammar, COMMENT_QUERY)?;
     Ok(Language {
@@ -62,6 +74,8 @@ pub fn language() -> Result<Language, AppError> {
         extensions: EXTENSIONS,
         grammar,
         elide_query,
+        const_elide_query,
+        static_elide_query,
         test_query,
         comment_query,
     })

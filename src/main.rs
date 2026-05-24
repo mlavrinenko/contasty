@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
 
+use contasty::config::Config;
+
 /// Strips executable code from your source files, leaving declarations
 /// behind — a tasty context bundle for your LLM.
 #[derive(Parser)]
@@ -27,12 +29,24 @@ struct Cli {
     /// Shows original vs compacted line counts (code, comments, blanks).
     #[arg(long)]
     stats: bool,
+
+    /// Path to a `contasty.toml` configuration file.
+    /// When not set, defaults to `contasty.toml` in the current directory.
+    #[arg(long)]
+    config: Option<PathBuf>,
 }
 
 fn main() -> Result<()> {
     env_logger::init();
     let cli = Cli::parse();
-    let items = contasty::collect(&cli.path, !cli.include_tests, !cli.include_comments)?;
+    let cwd = std::env::current_dir()?;
+    let config = Config::load(cli.config.as_deref(), &cwd);
+    let items = contasty::collect(
+        &cli.path,
+        !cli.include_tests,
+        !cli.include_comments,
+        &config.compact,
+    )?;
     if cli.stats {
         let report = contasty::stats::compute(&items);
         print!("{report}");

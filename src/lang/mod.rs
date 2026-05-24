@@ -26,6 +26,10 @@ pub struct Language {
     grammar: tree_sitter::Language,
     /// Captures whose ranges become `{ /* ... */ }` (function bodies).
     elide_query: Query,
+    /// Captures whose ranges become `{ /* ... */ }` (const value expressions).
+    const_elide_query: Option<Query>,
+    /// Captures whose ranges become `{ /* ... */ }` (static value expressions).
+    static_elide_query: Option<Query>,
     /// Captures whose ranges are removed entirely. Each match's captures are
     /// merged into one range so attribute + item collapse together.
     test_query: Query,
@@ -53,12 +57,15 @@ impl Language {
     ///
     /// - [`AppError::LangLoad`] if tree-sitter rejects the grammar.
     /// - [`AppError::ParseFailed`] if tree-sitter cannot produce a parse tree.
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     pub fn strip(
         &self,
         source: &str,
         path: &Path,
         drop_tests: bool,
         drop_comments: bool,
+        min_elide_bytes: usize,
     ) -> Result<String, AppError> {
         let mut parser = Parser::new();
         parser.set_language(self.grammar)?;
@@ -68,7 +75,34 @@ impl Language {
                 path: path.to_path_buf(),
             })?;
         let mut ranges = Vec::new();
-        collect_ranges(&self.elide_query, &tree, source, Action::Elide, &mut ranges);
+        collect_ranges(
+            &self.elide_query,
+            &tree,
+            source,
+            Action::Elide,
+            0,
+            &mut ranges,
+        );
+        if let Some(ref q) = self.const_elide_query {
+            collect_ranges(
+                q,
+                &tree,
+                source,
+                Action::Elide,
+                min_elide_bytes,
+                &mut ranges,
+            );
+        }
+        if let Some(ref q) = self.static_elide_query {
+            collect_ranges(
+                q,
+                &tree,
+                source,
+                Action::Elide,
+                min_elide_bytes,
+                &mut ranges,
+            );
+        }
         if drop_tests {
             collect_tests(&self.test_query, &tree, source, &mut ranges);
         }
@@ -78,6 +112,7 @@ impl Language {
                 &tree,
                 source,
                 Action::Delete,
+                0,
                 &mut ranges,
             );
         }
@@ -85,18 +120,24 @@ impl Language {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn collect_ranges(
     query: &Query,
     tree: &tree_sitter::Tree,
     source: &str,
     action: Action,
+    min_bytes: usize,
     out: &mut Vec<(usize, usize, Action)>,
 ) {
     let mut cursor = QueryCursor::new();
     for mat in cursor.matches(query, tree.root_node(), source.as_bytes()) {
         for cap in mat.captures {
             let node = cap.node;
-            out.push((node.start_byte(), node.end_byte(), action));
+            let start = node.start_byte();
+            let end = node.end_byte();
+            if end - start >= min_bytes {
+                out.push((start, end, action));
+            }
         }
     }
 }
@@ -272,6 +313,7 @@ mod tests {
                 Path::new("x.rs"),
                 false,
                 false,
+                0,
             )
             .expect("strip");
         assert!(stripped.contains("fn add(lhs: i32, rhs: i32) -> i32"));
@@ -291,7 +333,7 @@ mod tests {
                        fn it_adds() { assert_eq!(add(1, 2), 3); }\n\
                    }\n";
         let stripped = lang
-            .strip(src, Path::new("x.rs"), true, false)
+            .strip(src, Path::new("x.rs"), true, false, 0)
             .expect("strip");
         assert!(stripped.contains("pub fn add"));
         assert!(
@@ -319,7 +361,7 @@ mod tests {
                        fn it_adds() { assert_eq!(add(1, 2), 3); }\n\
                    }\n";
         let stripped = lang
-            .strip(src, Path::new("x.rs"), false, false)
+            .strip(src, Path::new("x.rs"), false, false, 0)
             .expect("strip");
         assert!(stripped.contains("mod tests"));
         assert!(stripped.contains("fn it_adds"));
@@ -332,7 +374,7 @@ mod tests {
         let lang = reg.detect(Path::new("x.rs")).expect("rust");
         let src = "pub fn keep() {}\n\n#[test]\nfn freestanding() { assert!(true); }\n";
         let stripped = lang
-            .strip(src, Path::new("x.rs"), true, false)
+            .strip(src, Path::new("x.rs"), true, false, 0)
             .expect("strip");
         assert!(stripped.contains("pub fn keep"));
         assert!(!stripped.contains("freestanding"));
@@ -350,7 +392,7 @@ mod tests {
                        fn helper() {}\n\
                    }\n";
         let stripped = lang
-            .strip(src, Path::new("x.rs"), true, false)
+            .strip(src, Path::new("x.rs"), true, false, 0)
             .expect("strip");
         assert!(stripped.contains("pub fn keep"));
         assert!(
@@ -375,7 +417,7 @@ mod tests {
                    /*! inner block doc */\n\
                    pub fn keep() {}\n";
         let stripped = lang
-            .strip(src, Path::new("x.rs"), false, true)
+            .strip(src, Path::new("x.rs"), false, true, 0)
             .expect("strip");
         assert!(stripped.contains("pub fn keep"));
         assert!(
@@ -410,7 +452,7 @@ mod tests {
         let lang = reg.detect(Path::new("x.rs")).expect("rust");
         let src = "/// doc\npub fn keep() {}\n// trailing\n";
         let stripped = lang
-            .strip(src, Path::new("x.rs"), false, false)
+            .strip(src, Path::new("x.rs"), false, false, 0)
             .expect("strip");
         assert!(stripped.contains("/// doc"));
         assert!(stripped.contains("// trailing"));

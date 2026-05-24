@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
+pub mod config;
 mod lang;
 mod render;
 pub mod stats;

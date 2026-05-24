@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use ignore::WalkBuilder;
 
 use crate::AppError;
+use crate::config::CompactConfig;
 use crate::lang::Registry;
 
 /// One file's stripped representation, ready for rendering.
@@ -40,6 +41,7 @@ pub fn collect(
     root: &Path,
     drop_tests: bool,
     drop_comments: bool,
+    compact: &CompactConfig,
 ) -> Result<Vec<Stripped>, AppError> {
     let registry = Registry::new()?;
     let mut out: Vec<Stripped> = Vec::new();
@@ -48,7 +50,9 @@ pub fn collect(
         if !is_file(&entry) {
             continue;
         }
-        if let Some(stripped) = strip_one(entry.path(), &registry, drop_tests, drop_comments)? {
+        if let Some(stripped) =
+            strip_one(entry.path(), &registry, drop_tests, drop_comments, compact)?
+        {
             out.push(stripped);
         }
     }
@@ -65,12 +69,19 @@ fn strip_one(
     registry: &Registry,
     drop_tests: bool,
     drop_comments: bool,
+    compact: &CompactConfig,
 ) -> Result<Option<Stripped>, AppError> {
     let Some(language) = registry.detect(path) else {
         return Ok(None);
     };
     let source = fs::read_to_string(path)?;
-    let content = language.strip(&source, path, drop_tests, drop_comments)?;
+    let content = language.strip(
+        &source,
+        path,
+        drop_tests,
+        drop_comments,
+        compact.elide_min_bytes,
+    )?;
     Ok(Some(Stripped {
         path: path.to_path_buf(),
         lang_name: language.name,
@@ -93,7 +104,7 @@ mod tests {
         let mut file = fs::File::create(&path).expect("create");
         writeln!(file, "fn add(lhs: i32, rhs: i32) -> i32 {{ lhs + rhs }}").expect("write");
 
-        let items = collect(tmp.path(), false, false).expect("collect");
+        let items = collect(tmp.path(), false, false, &CompactConfig::default()).expect("collect");
         assert_eq!(items.len(), 1);
         let item = items.first().expect("one item");
         assert_eq!(item.lang_name, "rust");
@@ -108,7 +119,7 @@ mod tests {
         let path = tmp.path().join("readme.txt");
         fs::write(&path, "plain text").expect("write");
 
-        let items = collect(tmp.path(), false, false).expect("collect");
+        let items = collect(tmp.path(), false, false, &CompactConfig::default()).expect("collect");
         assert!(items.is_empty());
     }
 
@@ -123,7 +134,7 @@ mod tests {
             .expect("write");
         }
 
-        let items = collect(tmp.path(), false, false).expect("collect");
+        let items = collect(tmp.path(), false, false, &CompactConfig::default()).expect("collect");
         let names: Vec<_> = items
             .iter()
             .map(|item| {
@@ -147,11 +158,13 @@ mod tests {
                    }\n";
         fs::write(tmp.path().join("a.rs"), src).expect("write");
 
-        let with_tests = collect(tmp.path(), false, false).expect("with tests");
+        let with_tests =
+            collect(tmp.path(), false, false, &CompactConfig::default()).expect("with tests");
         let with_item = with_tests.first().expect("one");
         assert!(with_item.content.contains("mod tests"));
 
-        let no_tests = collect(tmp.path(), true, false).expect("no tests");
+        let no_tests =
+            collect(tmp.path(), true, false, &CompactConfig::default()).expect("no tests");
         let no_item = no_tests.first().expect("one");
         assert!(!no_item.content.contains("mod tests"));
         assert!(!no_item.content.contains("cfg(test)"));
@@ -166,12 +179,14 @@ mod tests {
                    // trailing note\n";
         fs::write(tmp.path().join("a.rs"), src).expect("write");
 
-        let with_comments = collect(tmp.path(), false, false).expect("with comments");
+        let with_comments =
+            collect(tmp.path(), false, false, &CompactConfig::default()).expect("with comments");
         let with_item = with_comments.first().expect("one");
         assert!(with_item.content.contains("/// kept by default"));
         assert!(with_item.content.contains("// trailing note"));
 
-        let no_comments = collect(tmp.path(), false, true).expect("no comments");
+        let no_comments =
+            collect(tmp.path(), false, true, &CompactConfig::default()).expect("no comments");
         let no_item = no_comments.first().expect("one");
         assert!(!no_item.content.contains("kept by default"));
         assert!(!no_item.content.contains("trailing note"));
