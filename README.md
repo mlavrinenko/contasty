@@ -29,14 +29,17 @@ Download a pre-built binary from the
 ## Usage
 
 ```bash
-contasty src/ > context.md     # strip a directory
-contasty src/lib.rs            # strip a single file
-contasty                       # default path is "."
-contasty --include-tests src/  # keep #[test] / #[cfg(test)] items
+contasty src/ > context.md        # strip a directory
+contasty src/lib.rs               # strip a single file
+contasty                          # default path is "."
+contasty --include-tests src/     # keep #[test] / #[cfg(test)] items
+contasty --include-comments src/  # keep every comment (doc comments included)
 ```
 
-Tests (`#[test]` functions and `#[cfg(test)]` modules) are dropped from
-the output by default — they're noise for most context-bundle use cases.
+Tests (`#[test]` functions and `#[cfg(test)]` modules) and comments (every
+`//`, `///`, `//!`, `/* */`, `/** */`, `/*! */`) are dropped from the output
+by default — both are noise for most context-bundle use cases. Pass
+`--include-tests` and/or `--include-comments` to keep them.
 
 ### Adding a language
 

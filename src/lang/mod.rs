@@ -29,6 +29,9 @@ pub struct Language {
     /// Captures whose ranges are removed entirely. Each match's captures are
     /// merged into one range so attribute + item collapse together.
     test_query: Query,
+    /// Captures whose ranges are removed entirely (comments). No attribute
+    /// expansion — each capture stands alone.
+    comment_query: Query,
 }
 
 /// What to do with a captured byte range.
@@ -42,13 +45,21 @@ enum Action {
 
 impl Language {
     /// Strip elidable nodes from `source`. When `drop_tests` is true, test
-    /// items (`#[test]` / `#[cfg(test)]`) are removed entirely.
+    /// items (`#[test]` / `#[cfg(test)]`) are removed entirely. When
+    /// `drop_comments` is true, every `line_comment` and `block_comment` is
+    /// removed (doc comments included — the caller asked for all-or-nothing).
     ///
     /// # Errors
     ///
     /// - [`AppError::LangLoad`] if tree-sitter rejects the grammar.
     /// - [`AppError::ParseFailed`] if tree-sitter cannot produce a parse tree.
-    pub fn strip(&self, source: &str, path: &Path, drop_tests: bool) -> Result<String, AppError> {
+    pub fn strip(
+        &self,
+        source: &str,
+        path: &Path,
+        drop_tests: bool,
+        drop_comments: bool,
+    ) -> Result<String, AppError> {
         let mut parser = Parser::new();
         parser.set_language(self.grammar)?;
         let tree = parser
@@ -57,30 +68,40 @@ impl Language {
                 path: path.to_path_buf(),
             })?;
         let mut ranges = Vec::new();
-        collect_elide(&self.elide_query, &tree, source, &mut ranges);
+        collect_ranges(&self.elide_query, &tree, source, Action::Elide, &mut ranges);
         if drop_tests {
-            collect_delete(&self.test_query, &tree, source, &mut ranges);
+            collect_tests(&self.test_query, &tree, source, &mut ranges);
+        }
+        if drop_comments {
+            collect_ranges(
+                &self.comment_query,
+                &tree,
+                source,
+                Action::Delete,
+                &mut ranges,
+            );
         }
         Ok(splice(source, &ranges))
     }
 }
 
-fn collect_elide(
+fn collect_ranges(
     query: &Query,
     tree: &tree_sitter::Tree,
     source: &str,
+    action: Action,
     out: &mut Vec<(usize, usize, Action)>,
 ) {
     let mut cursor = QueryCursor::new();
     for mat in cursor.matches(query, tree.root_node(), source.as_bytes()) {
         for cap in mat.captures {
             let node = cap.node;
-            out.push((node.start_byte(), node.end_byte(), Action::Elide));
+            out.push((node.start_byte(), node.end_byte(), action));
         }
     }
 }
 
-fn collect_delete(
+fn collect_tests(
     query: &Query,
     tree: &tree_sitter::Tree,
     source: &str,
@@ -250,6 +271,7 @@ mod tests {
                 "fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n",
                 Path::new("x.rs"),
                 false,
+                false,
             )
             .expect("strip");
         assert!(stripped.contains("fn add(lhs: i32, rhs: i32) -> i32"));
@@ -268,7 +290,9 @@ mod tests {
                        #[test]\n    \
                        fn it_adds() { assert_eq!(add(1, 2), 3); }\n\
                    }\n";
-        let stripped = lang.strip(src, Path::new("x.rs"), true).expect("strip");
+        let stripped = lang
+            .strip(src, Path::new("x.rs"), true, false)
+            .expect("strip");
         assert!(stripped.contains("pub fn add"));
         assert!(
             !stripped.contains("cfg(test)"),
@@ -294,7 +318,9 @@ mod tests {
                        #[test]\n    \
                        fn it_adds() { assert_eq!(add(1, 2), 3); }\n\
                    }\n";
-        let stripped = lang.strip(src, Path::new("x.rs"), false).expect("strip");
+        let stripped = lang
+            .strip(src, Path::new("x.rs"), false, false)
+            .expect("strip");
         assert!(stripped.contains("mod tests"));
         assert!(stripped.contains("fn it_adds"));
         assert!(stripped.contains("/* ... */"));
@@ -305,7 +331,9 @@ mod tests {
         let reg = Registry::new().expect("registry init");
         let lang = reg.detect(Path::new("x.rs")).expect("rust");
         let src = "pub fn keep() {}\n\n#[test]\nfn freestanding() { assert!(true); }\n";
-        let stripped = lang.strip(src, Path::new("x.rs"), true).expect("strip");
+        let stripped = lang
+            .strip(src, Path::new("x.rs"), true, false)
+            .expect("strip");
         assert!(stripped.contains("pub fn keep"));
         assert!(!stripped.contains("freestanding"));
         assert!(!stripped.contains("#[test]"));
@@ -321,7 +349,9 @@ mod tests {
                    mod tests {\n    \
                        fn helper() {}\n\
                    }\n";
-        let stripped = lang.strip(src, Path::new("x.rs"), true).expect("strip");
+        let stripped = lang
+            .strip(src, Path::new("x.rs"), true, false)
+            .expect("strip");
         assert!(stripped.contains("pub fn keep"));
         assert!(
             !stripped.contains("mod tests"),
@@ -331,5 +361,58 @@ mod tests {
             !stripped.contains("allow(clippy::unwrap_used)"),
             "orphan attribute remained: {stripped}",
         );
+    }
+
+    #[test]
+    fn drop_comments_removes_line_block_and_doc_comments() {
+        let reg = Registry::new().expect("registry init");
+        let lang = reg.detect(Path::new("x.rs")).expect("rust");
+        let src = "// regular line comment\n\
+                   /// outer doc\n\
+                   //! inner doc\n\
+                   /* block */\n\
+                   /** outer block doc */\n\
+                   /*! inner block doc */\n\
+                   pub fn keep() {}\n";
+        let stripped = lang
+            .strip(src, Path::new("x.rs"), false, true)
+            .expect("strip");
+        assert!(stripped.contains("pub fn keep"));
+        assert!(
+            !stripped.contains("regular line comment"),
+            "line comment remained: {stripped}"
+        );
+        assert!(
+            !stripped.contains("outer doc"),
+            "/// doc comment remained: {stripped}"
+        );
+        assert!(
+            !stripped.contains("inner doc"),
+            "//! doc comment remained: {stripped}"
+        );
+        assert!(
+            !stripped.contains("block"),
+            "/* */ block comment remained: {stripped}"
+        );
+        assert!(
+            !stripped.contains("outer block doc"),
+            "/** */ block doc remained: {stripped}"
+        );
+        assert!(
+            !stripped.contains("inner block doc"),
+            "/*! */ block doc remained: {stripped}"
+        );
+    }
+
+    #[test]
+    fn keep_comments_keeps_everything() {
+        let reg = Registry::new().expect("registry init");
+        let lang = reg.detect(Path::new("x.rs")).expect("rust");
+        let src = "/// doc\npub fn keep() {}\n// trailing\n";
+        let stripped = lang
+            .strip(src, Path::new("x.rs"), false, false)
+            .expect("strip");
+        assert!(stripped.contains("/// doc"));
+        assert!(stripped.contains("// trailing"));
     }
 }

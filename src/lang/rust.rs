@@ -8,6 +8,9 @@
 //!
 //! Test items annotated with `#[test]` or `#[cfg(test)]` are matched by a
 //! second query and removed entirely when the caller opts to drop tests.
+//!
+//! A third query matches every `line_comment` and `block_comment` — including
+//! doc comments — and removes them when the caller opts to drop comments.
 
 use tree_sitter::Query;
 
@@ -34,22 +37,32 @@ const TEST_QUERY: &str = r#"
  (#match? @attr "^#\\[(test|cfg\\(test\\))\\]$"))
 "#;
 
+/// Every `//`, `///`, `//!` line comment and every `/* */`, `/** */`, `/*! */`
+/// block comment — tree-sitter-rust does not distinguish doc from non-doc at
+/// the node level, and the caller asked for all-or-nothing.
+const COMMENT_QUERY: &str = r"
+(line_comment) @comment
+(block_comment) @comment
+";
+
 /// Build the Rust language descriptor.
 ///
 /// # Errors
 ///
-/// Returns [`AppError::Query`] if `ELIDE_QUERY` or `TEST_QUERY` fail to compile
-/// against the bundled tree-sitter-rust grammar. This is a programming error,
-/// not a runtime condition.
+/// Returns [`AppError::Query`] if any embedded query fails to compile against
+/// the bundled tree-sitter-rust grammar. This is a programming error, not a
+/// runtime condition.
 pub fn language() -> Result<Language, AppError> {
     let grammar = tree_sitter_rust::language();
     let elide_query = Query::new(grammar, ELIDE_QUERY)?;
     let test_query = Query::new(grammar, TEST_QUERY)?;
+    let comment_query = Query::new(grammar, COMMENT_QUERY)?;
     Ok(Language {
         name: "rust",
         extensions: EXTENSIONS,
         grammar,
         elide_query,
         test_query,
+        comment_query,
     })
 }

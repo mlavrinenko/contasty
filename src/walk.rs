@@ -25,7 +25,8 @@ pub struct Stripped {
 /// skipped. Output is sorted by path for deterministic rendering.
 ///
 /// When `drop_tests` is true, `#[cfg(test)]` modules and `#[test]` functions
-/// are removed entirely instead of being shown with their signatures.
+/// are removed entirely instead of being shown with their signatures. When
+/// `drop_comments` is true, every comment (including doc comments) is removed.
 ///
 /// # Errors
 ///
@@ -33,7 +34,11 @@ pub struct Stripped {
 /// - [`AppError::Walk`] from the `ignore` crate.
 /// - [`AppError::LangLoad`] / [`AppError::Query`] / [`AppError::ParseFailed`]
 ///   when a language module misbehaves on a real file.
-pub fn collect(root: &Path, drop_tests: bool) -> Result<Vec<Stripped>, AppError> {
+pub fn collect(
+    root: &Path,
+    drop_tests: bool,
+    drop_comments: bool,
+) -> Result<Vec<Stripped>, AppError> {
     let registry = Registry::new()?;
     let mut out: Vec<Stripped> = Vec::new();
     for entry in WalkBuilder::new(root).build() {
@@ -41,7 +46,7 @@ pub fn collect(root: &Path, drop_tests: bool) -> Result<Vec<Stripped>, AppError>
         if !is_file(&entry) {
             continue;
         }
-        if let Some(stripped) = strip_one(entry.path(), &registry, drop_tests)? {
+        if let Some(stripped) = strip_one(entry.path(), &registry, drop_tests, drop_comments)? {
             out.push(stripped);
         }
     }
@@ -57,12 +62,13 @@ fn strip_one(
     path: &Path,
     registry: &Registry,
     drop_tests: bool,
+    drop_comments: bool,
 ) -> Result<Option<Stripped>, AppError> {
     let Some(language) = registry.detect(path) else {
         return Ok(None);
     };
     let source = fs::read_to_string(path)?;
-    let content = language.strip(&source, path, drop_tests)?;
+    let content = language.strip(&source, path, drop_tests, drop_comments)?;
     Ok(Some(Stripped {
         path: path.to_path_buf(),
         lang_name: language.name,
@@ -84,7 +90,7 @@ mod tests {
         let mut file = fs::File::create(&path).expect("create");
         writeln!(file, "fn add(lhs: i32, rhs: i32) -> i32 {{ lhs + rhs }}").expect("write");
 
-        let items = collect(tmp.path(), false).expect("collect");
+        let items = collect(tmp.path(), false, false).expect("collect");
         assert_eq!(items.len(), 1);
         let item = items.first().expect("one item");
         assert_eq!(item.lang_name, "rust");
@@ -99,7 +105,7 @@ mod tests {
         let path = tmp.path().join("readme.txt");
         fs::write(&path, "plain text").expect("write");
 
-        let items = collect(tmp.path(), false).expect("collect");
+        let items = collect(tmp.path(), false, false).expect("collect");
         assert!(items.is_empty());
     }
 
@@ -114,7 +120,7 @@ mod tests {
             .expect("write");
         }
 
-        let items = collect(tmp.path(), false).expect("collect");
+        let items = collect(tmp.path(), false, false).expect("collect");
         let names: Vec<_> = items
             .iter()
             .map(|item| {
@@ -138,14 +144,34 @@ mod tests {
                    }\n";
         fs::write(tmp.path().join("a.rs"), src).expect("write");
 
-        let with_tests = collect(tmp.path(), false).expect("with tests");
+        let with_tests = collect(tmp.path(), false, false).expect("with tests");
         let with_item = with_tests.first().expect("one");
         assert!(with_item.content.contains("mod tests"));
 
-        let no_tests = collect(tmp.path(), true).expect("no tests");
+        let no_tests = collect(tmp.path(), true, false).expect("no tests");
         let no_item = no_tests.first().expect("one");
         assert!(!no_item.content.contains("mod tests"));
         assert!(!no_item.content.contains("cfg(test)"));
+        assert!(no_item.content.contains("pub fn add"));
+    }
+
+    #[test]
+    fn collect_drops_comments_when_requested() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let src = "/// kept by default\n\
+                   pub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n\
+                   // trailing note\n";
+        fs::write(tmp.path().join("a.rs"), src).expect("write");
+
+        let with_comments = collect(tmp.path(), false, false).expect("with comments");
+        let with_item = with_comments.first().expect("one");
+        assert!(with_item.content.contains("/// kept by default"));
+        assert!(with_item.content.contains("// trailing note"));
+
+        let no_comments = collect(tmp.path(), false, true).expect("no comments");
+        let no_item = no_comments.first().expect("one");
+        assert!(!no_item.content.contains("kept by default"));
+        assert!(!no_item.content.contains("trailing note"));
         assert!(no_item.content.contains("pub fn add"));
     }
 }
