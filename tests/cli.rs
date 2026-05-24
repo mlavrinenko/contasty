@@ -23,7 +23,7 @@ fn cli_strips_rust_function_body_and_renders_markdown() {
         .stdout(contains("sample.rs"))
         .stdout(contains("```rust"))
         .stdout(contains("pub fn add(lhs: i32, rhs: i32) -> i32"))
-        .stdout(contains("/* ... */"));
+        .stdout(contains("{/*CTY*/}"));
 }
 
 #[test]

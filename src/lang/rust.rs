@@ -20,7 +20,7 @@ use super::Language;
 
 const EXTENSIONS: &[&str] = &["rs"];
 
-/// Nodes captured here are replaced with `{ /* ... */ }`.
+/// Nodes captured here are replaced with {ELISION}.
 const ELIDE_QUERY: &str = r"
 (function_item body: (block) @elide)
 ";

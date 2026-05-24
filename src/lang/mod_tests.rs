@@ -7,7 +7,7 @@ fn splice_replaces_two_function_bodies() {
     let src = "fn a() { foo(); }\nfn b() { bar(); }\n";
     let ranges = vec![(7, 17, Action::Elide), (25, 35, Action::Elide)];
     let out = splice(src, &ranges);
-    assert_eq!(out, "fn a() { /* ... */ }\nfn b() { /* ... */ }\n");
+    assert_eq!(out, "fn a() {/*CTY*/}\nfn b() {/*CTY*/}\n");
 }
 
 #[test]
@@ -20,7 +20,7 @@ fn splice_with_no_ranges_returns_source() {
 fn splice_drops_overlapping_ranges() {
     let src = "abcdef";
     let out = splice(src, &[(1, 4, Action::Elide), (2, 5, Action::Elide)]);
-    assert_eq!(out, "a{ /* ... */ }ef");
+    assert_eq!(out, "a{/*CTY*/}ef");
 }
 
 #[test]
@@ -28,7 +28,7 @@ fn splice_handles_unsorted_input() {
     let src = "fn a() { foo(); }\nfn b() { bar(); }\n";
     let ranges = vec![(25, 35, Action::Elide), (7, 17, Action::Elide)];
     let out = splice(src, &ranges);
-    assert_eq!(out, "fn a() { /* ... */ }\nfn b() { /* ... */ }\n");
+    assert_eq!(out, "fn a() {/*CTY*/}\nfn b() {/*CTY*/}\n");
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn registry_strips_a_rust_file() {
         )
         .expect("strip");
     assert!(stripped.contains("fn add(lhs: i32, rhs: i32) -> i32"));
-    assert!(stripped.contains("/* ... */"));
+    assert!(stripped.contains("{/*CTY*/}"));
     assert!(!stripped.contains("lhs + rhs"));
 }
 
@@ -121,7 +121,7 @@ fn keep_tests_keeps_cfg_test_module() {
         .expect("strip");
     assert!(stripped.contains("mod tests"));
     assert!(stripped.contains("fn it_adds"));
-    assert!(stripped.contains("/* ... */"));
+    assert!(stripped.contains("{/*CTY*/}"));
 }
 
 #[test]

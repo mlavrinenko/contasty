@@ -24,15 +24,15 @@ pub struct Language {
     pub name: &'static str,
     extensions: &'static [&'static str],
     grammar: tree_sitter::Language,
-    /// Captures whose ranges become `{ /* ... */ }` (function bodies).
+    /// Captures whose ranges become `ELISION` (function bodies).
     elide_query: Query,
-    /// Captures whose ranges become `{ /* ... */ }` (const value expressions).
+    /// Captures whose ranges become `ELISION` (const value expressions).
     const_elide_query: Option<Query>,
-    /// Captures whose ranges become `{ /* ... */ }` (static value expressions).
+    /// Captures whose ranges become `ELISION` (static value expressions).
     static_elide_query: Option<Query>,
-    /// Captures whose ranges become `{ /* ... */ }` (type alias values).
+    /// Captures whose ranges become `ELISION` (type alias values).
     type_elide_query: Option<Query>,
-    /// Captures whose ranges become `"[…contasty]"` (string literals).
+    /// Captures whose ranges become `STR_TRUNCATION` (string literals).
     string_trim_query: Option<Query>,
     /// Captures whose ranges are removed entirely. Each match's captures are
     /// merged into one range so attribute + item collapse together.
@@ -45,7 +45,7 @@ pub struct Language {
 /// What to do with a captured byte range.
 #[derive(Clone, Copy)]
 enum Action {
-    /// Replace with `{ /* ... */ }`.
+    /// Replace with `ELISION}`.
     Elide,
     /// Remove the range plus one trailing newline if present.
     Delete,
@@ -231,8 +231,8 @@ impl Registry {
     }
 }
 
-const ELISION: &str = "{ /* ... */ }";
-const STR_TRUNCATION: &str = "\"[...contasty]\"";
+const ELISION: &str = "{/*CTY*/}";
+const STR_TRUNCATION: &str = "\"[…CTY]\"";
 
 fn splice(source: &str, ranges: &[(usize, usize, Action)]) -> String {
     if ranges.is_empty() {
