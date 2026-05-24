@@ -28,6 +28,8 @@ clap = { version = "4", features = ["derive"] }
 env_logger = "0.11"
 tree-sitter = "0.20"
 tree-sitter-rust = "0.20"
+syn = { version = "2", features = ["full", "parsing"] }
+prettyplease = "0.2"
 ignore = "0.4"
 tokei = { version = "14", default-features = false }
 serde = { version = "1", features = ["derive"] }

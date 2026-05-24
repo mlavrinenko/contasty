@@ -93,5 +93,13 @@ pub fn language() -> Result<Language, AppError> {
         string_trim_query,
         test_query,
         comment_query,
+        format: Some(format),
     })
+}
+
+/// Pretty-print stripped Rust source via `prettyplease`. Returns `None` if
+/// `syn` cannot parse the input — caller falls back to the unformatted text.
+fn format(source: &str) -> Option<String> {
+    let file = syn::parse_file(source).ok()?;
+    Some(prettyplease::unparse(&file))
 }

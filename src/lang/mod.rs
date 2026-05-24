@@ -40,6 +40,10 @@ pub struct Language {
     /// Captures whose ranges are removed entirely (comments). No attribute
     /// expansion — each capture stands alone.
     comment_query: Query,
+    /// Optional source formatter applied after splicing. Returns `None` if the
+    /// formatter cannot handle the (post-strip) source — caller keeps the
+    /// unformatted output rather than failing the whole file.
+    format: Option<fn(&str) -> Option<String>>,
 }
 
 /// What to do with a captured byte range.
@@ -72,76 +76,73 @@ impl Language {
         drop_comments: bool,
         compact: &crate::config::CompactConfig,
     ) -> Result<String, AppError> {
+        let tree = self.parse(source, path)?;
+        let ranges = self.collect_all(&tree, source, drop_tests, drop_comments, compact);
+        let spliced = splice(source, &ranges);
+        // Only format when comments are being dropped: source-level formatters
+        // like prettyplease parse via `syn`, which discards non-doc comments —
+        // running it under `--include-comments` would silently lose them.
+        if !drop_comments {
+            return Ok(spliced);
+        }
+        Ok(self
+            .format
+            .and_then(|formatter| formatter(&spliced))
+            .unwrap_or(spliced))
+    }
+
+    fn parse(&self, source: &str, path: &Path) -> Result<tree_sitter::Tree, AppError> {
         let mut parser = Parser::new();
         parser.set_language(self.grammar)?;
-        let tree = parser
+        parser
             .parse(source, None)
             .ok_or_else(|| AppError::ParseFailed {
                 path: path.to_path_buf(),
-            })?;
+            })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn collect_all(
+        &self,
+        tree: &tree_sitter::Tree,
+        source: &str,
+        drop_tests: bool,
+        drop_comments: bool,
+        compact: &crate::config::CompactConfig,
+    ) -> Vec<(usize, usize, Action)> {
         let mut ranges = Vec::new();
-        collect_ranges(
-            &self.elide_query,
-            &tree,
-            source,
-            Action::Elide,
-            0,
-            &mut ranges,
-        );
-        if let Some(ref q) = self.const_elide_query {
-            collect_ranges(
-                q,
-                &tree,
-                source,
-                Action::Elide,
-                compact.elide_min_bytes,
-                &mut ranges,
-            );
-        }
-        if let Some(ref q) = self.static_elide_query {
-            collect_ranges(
-                q,
-                &tree,
-                source,
-                Action::Elide,
-                compact.elide_min_bytes,
-                &mut ranges,
-            );
-        }
-        if let Some(ref q) = self.type_elide_query {
-            collect_ranges(
-                q,
-                &tree,
-                source,
-                Action::Elide,
-                compact.elide_min_bytes,
-                &mut ranges,
-            );
-        }
-        if let Some(ref q) = self.string_trim_query {
-            collect_ranges(
-                q,
-                &tree,
-                source,
+        let min = compact.elide_min_bytes;
+        let trim = compact.max_string_bytes;
+        let opt_queries = [
+            (Some(&self.elide_query), Action::Elide, 0),
+            (self.const_elide_query.as_ref(), Action::Elide, min),
+            (self.static_elide_query.as_ref(), Action::Elide, min),
+            (self.type_elide_query.as_ref(), Action::Elide, min),
+            (
+                self.string_trim_query.as_ref(),
                 Action::TruncateString,
-                compact.max_string_bytes,
-                &mut ranges,
-            );
+                trim,
+            ),
+        ];
+        for (query, action, threshold) in opt_queries {
+            if let Some(q) = query {
+                collect_ranges(q, tree, source, action, threshold, &mut ranges);
+            }
         }
         if drop_tests {
-            collect_tests(&self.test_query, &tree, source, &mut ranges);
+            collect_tests(&self.test_query, tree, source, &mut ranges);
         }
         if drop_comments {
             collect_ranges(
                 &self.comment_query,
-                &tree,
+                tree,
                 source,
                 Action::Delete,
                 0,
                 &mut ranges,
             );
         }
-        Ok(splice(source, &ranges))
+        ranges
     }
 }
 
@@ -249,38 +250,7 @@ fn splice(source: &str, ranges: &[(usize, usize, Action)]) -> String {
         cursor = apply(action, &mut out, source, end);
     }
     out.push_str(source.get(cursor..).unwrap_or_default());
-    compact_blanks(&mut out);
     out
-}
-
-fn compact_blanks(source: &mut String) {
-    let bytes = source.as_bytes();
-    let mut result = String::with_capacity(source.len());
-    let mut pos = 0;
-    while pos < bytes.len() {
-        let Some(&byte) = bytes.get(pos) else {
-            break;
-        };
-        if byte == b'\n' {
-            let start = pos;
-            while pos < bytes.len() && bytes.get(pos) == Some(&b'\n') {
-                pos += 1;
-            }
-            let count = pos - start;
-            if count > 2 {
-                result.push('\n');
-                result.push('\n');
-            } else {
-                for _ in 0..count {
-                    result.push('\n');
-                }
-            }
-        } else {
-            result.push(byte as char);
-            pos += 1;
-        }
-    }
-    *source = result;
 }
 
 fn apply(action: Action, out: &mut String, source: &str, end: usize) -> usize {
