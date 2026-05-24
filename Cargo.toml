@@ -25,12 +25,15 @@ path = "src/main.rs"
 thiserror = "2"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
-log = "0.4"
 env_logger = "0.11"
+tree-sitter = "0.20"
+tree-sitter-rust = "0.20"
+ignore = "0.4"
 
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"
+tempfile = "3"
 
 [profile.release]
 strip = true

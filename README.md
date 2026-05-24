@@ -4,7 +4,14 @@
 [![crates.io](https://img.shields.io/crates/v/contasty.svg)](https://crates.io/crates/contasty)
 [![License: MIT](https://img.shields.io/crates/l/contasty.svg)](LICENSE-MIT)
 
-Strips all executable likes from your code to prepare tasty context for your agent.
+Strips executable lines from your code to prepare tasty context for your agent.
+
+Walks a directory (respecting `.gitignore`), parses each supported source file
+with [tree-sitter](https://tree-sitter.github.io/), elides function bodies, and
+prints the result as a single Markdown document — declarations, signatures, and
+types intact, ready to paste into an LLM context window.
+
+Supported languages: Rust.
 
 ## Install
 
@@ -22,8 +29,17 @@ Download a pre-built binary from the
 ## Usage
 
 ```bash
-contasty
+contasty src/ > context.md     # strip a directory
+contasty src/lib.rs            # strip a single file
+contasty                       # default path is "."
 ```
+
+### Adding a language
+
+1. Add a `tree-sitter-<lang>` dependency to `Cargo.toml`.
+2. Drop a sibling module under `src/lang/` returning a `Language` (grammar,
+   extensions, elide query).
+3. Register it inside `Registry::new`.
 
 ## Development
 

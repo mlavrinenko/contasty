@@ -1,20 +1,24 @@
+use std::io::Write;
+use std::path::PathBuf;
+
 use anyhow::Result;
 use clap::Parser;
 
-/// Strips all executable likes from your code to prepare tasty context for your agent.
+/// Strips executable code from your source files, leaving declarations
+/// behind — a tasty context bundle for your LLM.
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
-    /// Name to greet
-    #[arg(default_value = "contasty")]
-    name: String,
+    /// Directory or file to process. Walks `.gitignore`-aware.
+    #[arg(default_value = ".")]
+    path: PathBuf,
 }
 
 fn main() -> Result<()> {
     env_logger::init();
-
     let cli = Cli::parse();
-    contasty::greet(&cli.name)?;
-
+    let items = contasty::collect(&cli.path)?;
+    let md = contasty::render_markdown(&items);
+    std::io::stdout().write_all(md.as_bytes())?;
     Ok(())
 }
