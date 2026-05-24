@@ -75,13 +75,7 @@ fn strip_one(
         return Ok(None);
     };
     let source = fs::read_to_string(path)?;
-    let content = language.strip(
-        &source,
-        path,
-        drop_tests,
-        drop_comments,
-        compact.elide_min_bytes,
-    )?;
+    let content = language.strip(&source, path, drop_tests, drop_comments, compact)?;
     Ok(Some(Stripped {
         path: path.to_path_buf(),
         lang_name: language.name,

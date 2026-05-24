@@ -30,6 +30,10 @@ pub struct Language {
     const_elide_query: Option<Query>,
     /// Captures whose ranges become `{ /* ... */ }` (static value expressions).
     static_elide_query: Option<Query>,
+    /// Captures whose ranges become `{ /* ... */ }` (type alias values).
+    type_elide_query: Option<Query>,
+    /// Captures whose ranges become `"[…contasty]"` (string literals).
+    string_trim_query: Option<Query>,
     /// Captures whose ranges are removed entirely. Each match's captures are
     /// merged into one range so attribute + item collapse together.
     test_query: Query,
@@ -45,6 +49,8 @@ enum Action {
     Elide,
     /// Remove the range plus one trailing newline if present.
     Delete,
+    /// Replace with a string-truncation marker.
+    TruncateString,
 }
 
 impl Language {
@@ -58,14 +64,13 @@ impl Language {
     /// - [`AppError::LangLoad`] if tree-sitter rejects the grammar.
     /// - [`AppError::ParseFailed`] if tree-sitter cannot produce a parse tree.
     #[allow(clippy::too_many_arguments)]
-    #[allow(clippy::too_many_arguments)]
     pub fn strip(
         &self,
         source: &str,
         path: &Path,
         drop_tests: bool,
         drop_comments: bool,
-        min_elide_bytes: usize,
+        compact: &crate::config::CompactConfig,
     ) -> Result<String, AppError> {
         let mut parser = Parser::new();
         parser.set_language(self.grammar)?;
@@ -89,7 +94,7 @@ impl Language {
                 &tree,
                 source,
                 Action::Elide,
-                min_elide_bytes,
+                compact.elide_min_bytes,
                 &mut ranges,
             );
         }
@@ -99,7 +104,27 @@ impl Language {
                 &tree,
                 source,
                 Action::Elide,
-                min_elide_bytes,
+                compact.elide_min_bytes,
+                &mut ranges,
+            );
+        }
+        if let Some(ref q) = self.type_elide_query {
+            collect_ranges(
+                q,
+                &tree,
+                source,
+                Action::Elide,
+                compact.elide_min_bytes,
+                &mut ranges,
+            );
+        }
+        if let Some(ref q) = self.string_trim_query {
+            collect_ranges(
+                q,
+                &tree,
+                source,
+                Action::TruncateString,
+                compact.max_string_bytes,
                 &mut ranges,
             );
         }
@@ -207,6 +232,7 @@ impl Registry {
 }
 
 const ELISION: &str = "{ /* ... */ }";
+const STR_TRUNCATION: &str = "\"[...contasty]\"";
 
 fn splice(source: &str, ranges: &[(usize, usize, Action)]) -> String {
     if ranges.is_empty() {
@@ -223,7 +249,38 @@ fn splice(source: &str, ranges: &[(usize, usize, Action)]) -> String {
         cursor = apply(action, &mut out, source, end);
     }
     out.push_str(source.get(cursor..).unwrap_or_default());
+    compact_blanks(&mut out);
     out
+}
+
+fn compact_blanks(source: &mut String) {
+    let bytes = source.as_bytes();
+    let mut result = String::with_capacity(source.len());
+    let mut pos = 0;
+    while pos < bytes.len() {
+        let Some(&byte) = bytes.get(pos) else {
+            break;
+        };
+        if byte == b'\n' {
+            let start = pos;
+            while pos < bytes.len() && bytes.get(pos) == Some(&b'\n') {
+                pos += 1;
+            }
+            let count = pos - start;
+            if count > 2 {
+                result.push('\n');
+                result.push('\n');
+            } else {
+                for _ in 0..count {
+                    result.push('\n');
+                }
+            }
+        } else {
+            result.push(byte as char);
+            pos += 1;
+        }
+    }
+    *source = result;
 }
 
 fn apply(action: Action, out: &mut String, source: &str, end: usize) -> usize {
@@ -233,6 +290,10 @@ fn apply(action: Action, out: &mut String, source: &str, end: usize) -> usize {
             end
         }
         Action::Delete => consume_trailing_newline(source, end),
+        Action::TruncateString => {
+            out.push_str(STR_TRUNCATION);
+            end
+        }
     }
 }
 
@@ -256,6 +317,8 @@ fn sort_ranges(ranges: &[(usize, usize, Action)]) -> Vec<(usize, usize, Action)>
 
 #[cfg(test)]
 mod tests {
+    use crate::config::CompactConfig;
+
     use super::*;
 
     #[test]
@@ -313,7 +376,7 @@ mod tests {
                 Path::new("x.rs"),
                 false,
                 false,
-                0,
+                &CompactConfig::default(),
             )
             .expect("strip");
         assert!(stripped.contains("fn add(lhs: i32, rhs: i32) -> i32"));
@@ -333,7 +396,13 @@ mod tests {
                        fn it_adds() { assert_eq!(add(1, 2), 3); }\n\
                    }\n";
         let stripped = lang
-            .strip(src, Path::new("x.rs"), true, false, 0)
+            .strip(
+                src,
+                Path::new("x.rs"),
+                true,
+                false,
+                &CompactConfig::default(),
+            )
             .expect("strip");
         assert!(stripped.contains("pub fn add"));
         assert!(
@@ -361,7 +430,13 @@ mod tests {
                        fn it_adds() { assert_eq!(add(1, 2), 3); }\n\
                    }\n";
         let stripped = lang
-            .strip(src, Path::new("x.rs"), false, false, 0)
+            .strip(
+                src,
+                Path::new("x.rs"),
+                false,
+                false,
+                &CompactConfig::default(),
+            )
             .expect("strip");
         assert!(stripped.contains("mod tests"));
         assert!(stripped.contains("fn it_adds"));
@@ -374,7 +449,13 @@ mod tests {
         let lang = reg.detect(Path::new("x.rs")).expect("rust");
         let src = "pub fn keep() {}\n\n#[test]\nfn freestanding() { assert!(true); }\n";
         let stripped = lang
-            .strip(src, Path::new("x.rs"), true, false, 0)
+            .strip(
+                src,
+                Path::new("x.rs"),
+                true,
+                false,
+                &CompactConfig::default(),
+            )
             .expect("strip");
         assert!(stripped.contains("pub fn keep"));
         assert!(!stripped.contains("freestanding"));
@@ -392,7 +473,13 @@ mod tests {
                        fn helper() {}\n\
                    }\n";
         let stripped = lang
-            .strip(src, Path::new("x.rs"), true, false, 0)
+            .strip(
+                src,
+                Path::new("x.rs"),
+                true,
+                false,
+                &CompactConfig::default(),
+            )
             .expect("strip");
         assert!(stripped.contains("pub fn keep"));
         assert!(
@@ -417,7 +504,13 @@ mod tests {
                    /*! inner block doc */\n\
                    pub fn keep() {}\n";
         let stripped = lang
-            .strip(src, Path::new("x.rs"), false, true, 0)
+            .strip(
+                src,
+                Path::new("x.rs"),
+                false,
+                true,
+                &CompactConfig::default(),
+            )
             .expect("strip");
         assert!(stripped.contains("pub fn keep"));
         assert!(
@@ -452,7 +545,13 @@ mod tests {
         let lang = reg.detect(Path::new("x.rs")).expect("rust");
         let src = "/// doc\npub fn keep() {}\n// trailing\n";
         let stripped = lang
-            .strip(src, Path::new("x.rs"), false, false, 0)
+            .strip(
+                src,
+                Path::new("x.rs"),
+                false,
+                false,
+                &CompactConfig::default(),
+            )
             .expect("strip");
         assert!(stripped.contains("/// doc"));
         assert!(stripped.contains("// trailing"));

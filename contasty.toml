@@ -6,6 +6,12 @@
 # Minimum byte-length of a value expression that qualifies for elision.
 # Small definitions (like `pub const MAX: usize = 42;`) are kept intact
 # so LLM agents can still see named constants and small data tables.
-# Set to 0 to elide every const/static value regardless of size.
+# Set to 0 to elide every const/static/type value regardless of size.
 # Default: 80
 elide_min_bytes = 80
+
+# String literals longer than this (in bytes) are replaced with
+# `"[…contasty]"` so long embedded strings don't bloat the output.
+# Set to a very large number (e.g. 100000) to effectively disable.
+# Default: 256
+max_string_bytes = 256

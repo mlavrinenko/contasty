@@ -35,6 +35,17 @@ const STATIC_ELIDE_QUERY: &str = r"
 (static_item value: (_) @elide)
 ";
 
+/// Captures `type_item` type expressions for elision.
+const TYPE_ELIDE_QUERY: &str = r"
+(type_item type: (_) @elide)
+";
+
+/// Captures `string_literal` and `raw_string_literal` nodes for truncation.
+const STRING_TRIM_QUERY: &str = r"
+(string_literal) @trim
+(raw_string_literal) @trim
+";
+
 /// Matches any `#[test]` or `#[cfg(test)]` `attribute_item`. The splicer walks
 /// the AST from the captured attribute to absorb adjacent attribute siblings
 /// and the item they decorate — so `#[cfg(test)] #[allow(...)] mod tests {}`
@@ -67,6 +78,8 @@ pub fn language() -> Result<Language, AppError> {
     let elide_query = Query::new(grammar, ELIDE_QUERY)?;
     let const_elide_query = Some(Query::new(grammar, CONST_ELIDE_QUERY)?);
     let static_elide_query = Some(Query::new(grammar, STATIC_ELIDE_QUERY)?);
+    let type_elide_query = Some(Query::new(grammar, TYPE_ELIDE_QUERY)?);
+    let string_trim_query = Some(Query::new(grammar, STRING_TRIM_QUERY)?);
     let test_query = Query::new(grammar, TEST_QUERY)?;
     let comment_query = Query::new(grammar, COMMENT_QUERY)?;
     Ok(Language {
@@ -76,6 +89,8 @@ pub fn language() -> Result<Language, AppError> {
         elide_query,
         const_elide_query,
         static_elide_query,
+        type_elide_query,
+        string_trim_query,
         test_query,
         comment_query,
     })

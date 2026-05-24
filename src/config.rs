@@ -14,18 +14,25 @@ pub struct Config {
 pub struct CompactConfig {
     #[serde(default = "default_min_bytes")]
     pub elide_min_bytes: usize,
+    #[serde(default = "default_max_string_bytes")]
+    pub max_string_bytes: usize,
 }
 
 impl Default for CompactConfig {
     fn default() -> Self {
         Self {
             elide_min_bytes: default_min_bytes(),
+            max_string_bytes: default_max_string_bytes(),
         }
     }
 }
 
 const fn default_min_bytes() -> usize {
     0
+}
+
+const fn default_max_string_bytes() -> usize {
+    256
 }
 
 impl Config {
