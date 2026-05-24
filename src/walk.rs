@@ -103,7 +103,7 @@ mod tests {
         let item = items.first().expect("one item");
         assert_eq!(item.lang_name, "rust");
         assert!(item.content.contains("fn add(lhs: i32, rhs: i32) -> i32"));
-        assert!(item.content.contains("{/*CTY*/}"));
+        assert!(item.content.contains("{}"));
         assert!(!item.content.contains("lhs + rhs"));
     }
 

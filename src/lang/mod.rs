@@ -231,7 +231,7 @@ impl Registry {
     }
 }
 
-const ELISION: &str = "{/*CTY*/}";
+const ELISION: &str = "{}";
 const STR_TRUNCATION: &str = "\"[…CTY]\"";
 
 fn splice(source: &str, ranges: &[(usize, usize, Action)]) -> String {
