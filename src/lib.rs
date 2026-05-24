@@ -11,6 +11,7 @@ use thiserror::Error;
 
 mod lang;
 mod render;
+pub mod stats;
 mod walk;
 
 pub use lang::Registry;

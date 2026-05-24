@@ -34,6 +34,7 @@ mod tests {
         let items = vec![Stripped {
             path: PathBuf::from("src/lib.rs"),
             lang_name: "rust",
+            original: String::new(),
             content: "pub fn greet() { /* ... */ }".to_owned(),
         }];
         let md = render_markdown(&items);
@@ -57,11 +58,13 @@ mod tests {
             Stripped {
                 path: PathBuf::from("a.rs"),
                 lang_name: "rust",
+                original: String::new(),
                 content: "fn a() { /* ... */ }".to_owned(),
             },
             Stripped {
                 path: PathBuf::from("b.rs"),
                 lang_name: "rust",
+                original: String::new(),
                 content: "fn b() { /* ... */ }".to_owned(),
             },
         ];

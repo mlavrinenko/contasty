@@ -22,13 +22,23 @@ struct Cli {
     /// Off by default — comments are noise for most context-bundle use cases.
     #[arg(long)]
     include_comments: bool,
+
+    /// Print compactization statistics instead of the stripped code.
+    /// Shows original vs compacted line counts (code, comments, blanks).
+    #[arg(long)]
+    stats: bool,
 }
 
 fn main() -> Result<()> {
     env_logger::init();
     let cli = Cli::parse();
     let items = contasty::collect(&cli.path, !cli.include_tests, !cli.include_comments)?;
-    let md = contasty::render_markdown(&items);
-    std::io::stdout().write_all(md.as_bytes())?;
+    if cli.stats {
+        let report = contasty::stats::compute(&items);
+        print!("{report}");
+    } else {
+        let md = contasty::render_markdown(&items);
+        std::io::stdout().write_all(md.as_bytes())?;
+    }
     Ok(())
 }

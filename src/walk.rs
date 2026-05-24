@@ -15,6 +15,8 @@ pub struct Stripped {
     pub path: PathBuf,
     /// Markdown fence info-string for this file's language (e.g. `"rust"`).
     pub lang_name: &'static str,
+    /// Original source text before stripping.
+    pub original: String,
     /// Stripped source text — declarations kept, bodies replaced with `{ /* ... */ }`.
     pub content: String,
 }
@@ -72,6 +74,7 @@ fn strip_one(
     Ok(Some(Stripped {
         path: path.to_path_buf(),
         lang_name: language.name,
+        original: source,
         content,
     }))
 }
