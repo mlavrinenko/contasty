@@ -4,7 +4,7 @@
 //!
 //! 1. Add a `tree-sitter-<lang>` dependency.
 //! 2. Drop a sibling module here that returns a [`Language`] (grammar + elide
-//!    query + file extensions).
+//!    query + test-drop query + file extensions).
 //! 3. Register it inside [`Registry::new`].
 //!
 //! Everything else — extension dispatch, parsing, byte-range splicing — is
@@ -18,23 +18,37 @@ use crate::AppError;
 
 mod rust;
 
-/// A registered language: grammar + tree-sitter query identifying elidable nodes.
+/// A registered language: grammar + tree-sitter queries.
 pub struct Language {
     /// Markdown fence info-string (e.g. `"rust"`).
     pub name: &'static str,
     extensions: &'static [&'static str],
     grammar: tree_sitter::Language,
+    /// Captures whose ranges become `{ /* ... */ }` (function bodies).
     elide_query: Query,
+    /// Captures whose ranges are removed entirely. Each match's captures are
+    /// merged into one range so attribute + item collapse together.
+    test_query: Query,
+}
+
+/// What to do with a captured byte range.
+#[derive(Clone, Copy)]
+enum Action {
+    /// Replace with `{ /* ... */ }`.
+    Elide,
+    /// Remove the range plus one trailing newline if present.
+    Delete,
 }
 
 impl Language {
-    /// Strip elidable nodes from `source`, returning the trimmed text.
+    /// Strip elidable nodes from `source`. When `drop_tests` is true, test
+    /// items (`#[test]` / `#[cfg(test)]`) are removed entirely.
     ///
     /// # Errors
     ///
     /// - [`AppError::LangLoad`] if tree-sitter rejects the grammar.
     /// - [`AppError::ParseFailed`] if tree-sitter cannot produce a parse tree.
-    pub fn strip(&self, source: &str, path: &Path) -> Result<String, AppError> {
+    pub fn strip(&self, source: &str, path: &Path, drop_tests: bool) -> Result<String, AppError> {
         let mut parser = Parser::new();
         parser.set_language(self.grammar)?;
         let tree = parser
@@ -42,25 +56,66 @@ impl Language {
             .ok_or_else(|| AppError::ParseFailed {
                 path: path.to_path_buf(),
             })?;
-        let ranges = collect_ranges(&mut QueryCursor::new(), &self.elide_query, &tree, source);
-        Ok(splice_elide(source, &ranges))
+        let mut ranges = Vec::new();
+        collect_elide(&self.elide_query, &tree, source, &mut ranges);
+        if drop_tests {
+            collect_delete(&self.test_query, &tree, source, &mut ranges);
+        }
+        Ok(splice(source, &ranges))
     }
 }
 
-fn collect_ranges(
-    cursor: &mut QueryCursor,
+fn collect_elide(
     query: &Query,
     tree: &tree_sitter::Tree,
     source: &str,
-) -> Vec<(usize, usize)> {
-    let mut ranges: Vec<(usize, usize)> = Vec::new();
+    out: &mut Vec<(usize, usize, Action)>,
+) {
+    let mut cursor = QueryCursor::new();
     for mat in cursor.matches(query, tree.root_node(), source.as_bytes()) {
         for cap in mat.captures {
             let node = cap.node;
-            ranges.push((node.start_byte(), node.end_byte()));
+            out.push((node.start_byte(), node.end_byte(), Action::Elide));
         }
     }
-    ranges
+}
+
+fn collect_delete(
+    query: &Query,
+    tree: &tree_sitter::Tree,
+    source: &str,
+    out: &mut Vec<(usize, usize, Action)>,
+) {
+    let mut cursor = QueryCursor::new();
+    for mat in cursor.matches(query, tree.root_node(), source.as_bytes()) {
+        for cap in mat.captures {
+            let (start, end) = expand_attribute_to_item(cap.node);
+            if start < end {
+                out.push((start, end, Action::Delete));
+            }
+        }
+    }
+}
+
+/// Given an `attribute_item` node, walk to its sibling item, absorbing any
+/// other `attribute_item` siblings along the way. Returns the byte range
+/// covering the whole `#[a] #[b] item` group.
+fn expand_attribute_to_item(attr: tree_sitter::Node) -> (usize, usize) {
+    let mut leftmost = attr;
+    while let Some(prev) = leftmost.prev_named_sibling() {
+        if prev.kind() != "attribute_item" {
+            break;
+        }
+        leftmost = prev;
+    }
+    let mut rightmost = attr;
+    while let Some(next) = rightmost.next_named_sibling() {
+        rightmost = next;
+        if next.kind() != "attribute_item" {
+            break;
+        }
+    }
+    (leftmost.start_byte(), rightmost.end_byte())
 }
 
 /// Set of languages contasty knows how to strip.
@@ -91,29 +146,49 @@ impl Registry {
 
 const ELISION: &str = "{ /* ... */ }";
 
-fn splice_elide(source: &str, ranges: &[(usize, usize)]) -> String {
-    let sorted = sort_dedup(ranges);
-    if sorted.is_empty() {
+fn splice(source: &str, ranges: &[(usize, usize, Action)]) -> String {
+    if ranges.is_empty() {
         return source.to_owned();
     }
+    let sorted = sort_ranges(ranges);
     let mut out = String::with_capacity(source.len());
     let mut cursor = 0_usize;
-    for (start, end) in sorted {
+    for &(start, end, action) in &sorted {
         if start < cursor {
             continue;
         }
         out.push_str(source.get(cursor..start).unwrap_or_default());
-        out.push_str(ELISION);
-        cursor = end;
+        cursor = apply(action, &mut out, source, end);
     }
     out.push_str(source.get(cursor..).unwrap_or_default());
     out
 }
 
-fn sort_dedup(ranges: &[(usize, usize)]) -> Vec<(usize, usize)> {
-    let mut sorted: Vec<(usize, usize)> = ranges.to_vec();
-    sorted.sort_by_key(|&(start, _)| start);
-    sorted.dedup();
+fn apply(action: Action, out: &mut String, source: &str, end: usize) -> usize {
+    match action {
+        Action::Elide => {
+            out.push_str(ELISION);
+            end
+        }
+        Action::Delete => consume_trailing_newline(source, end),
+    }
+}
+
+fn consume_trailing_newline(source: &str, end: usize) -> usize {
+    if source.as_bytes().get(end) == Some(&b'\n') {
+        end + 1
+    } else {
+        end
+    }
+}
+
+fn sort_ranges(ranges: &[(usize, usize, Action)]) -> Vec<(usize, usize, Action)> {
+    let mut sorted: Vec<_> = ranges.to_vec();
+    // Sort by start ascending, then by end descending so a wider range that
+    // shares a start wins over a narrower one (the narrower is skipped via
+    // `start < cursor`).
+    sorted.sort_by(|left, right| left.0.cmp(&right.0).then(right.1.cmp(&left.1)));
+    sorted.dedup_by(|left, right| left.0 == right.0 && left.1 == right.1);
     sorted
 }
 
@@ -124,30 +199,38 @@ mod tests {
     #[test]
     fn splice_replaces_two_function_bodies() {
         let src = "fn a() { foo(); }\nfn b() { bar(); }\n";
-        let ranges = vec![(7, 17), (25, 35)];
-        let out = splice_elide(src, &ranges);
+        let ranges = vec![(7, 17, Action::Elide), (25, 35, Action::Elide)];
+        let out = splice(src, &ranges);
         assert_eq!(out, "fn a() { /* ... */ }\nfn b() { /* ... */ }\n");
     }
 
     #[test]
     fn splice_with_no_ranges_returns_source() {
         let src = "hello world";
-        assert_eq!(splice_elide(src, &[]), src);
+        assert_eq!(splice(src, &[]), src);
     }
 
     #[test]
     fn splice_drops_overlapping_ranges() {
         let src = "abcdef";
-        let out = splice_elide(src, &[(1, 4), (2, 5)]);
+        let out = splice(src, &[(1, 4, Action::Elide), (2, 5, Action::Elide)]);
         assert_eq!(out, "a{ /* ... */ }ef");
     }
 
     #[test]
     fn splice_handles_unsorted_input() {
         let src = "fn a() { foo(); }\nfn b() { bar(); }\n";
-        let ranges = vec![(25, 35), (7, 17)];
-        let out = splice_elide(src, &ranges);
+        let ranges = vec![(25, 35, Action::Elide), (7, 17, Action::Elide)];
+        let out = splice(src, &ranges);
         assert_eq!(out, "fn a() { /* ... */ }\nfn b() { /* ... */ }\n");
+    }
+
+    #[test]
+    fn splice_delete_action_removes_range_and_trailing_newline() {
+        let src = "keep\n#[cfg(test)]\nmod t {}\nkeep\n";
+        // Delete the attr+mod range — bytes 5..26 covers "#[cfg(test)]\nmod t {}".
+        let out = splice(src, &[(5, 26, Action::Delete)]);
+        assert_eq!(out, "keep\nkeep\n");
     }
 
     #[test]
@@ -166,10 +249,87 @@ mod tests {
             .strip(
                 "fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n",
                 Path::new("x.rs"),
+                false,
             )
             .expect("strip");
         assert!(stripped.contains("fn add(lhs: i32, rhs: i32) -> i32"));
         assert!(stripped.contains("/* ... */"));
         assert!(!stripped.contains("lhs + rhs"));
+    }
+
+    #[test]
+    fn drop_tests_removes_cfg_test_module() {
+        let reg = Registry::new().expect("registry init");
+        let lang = reg.detect(Path::new("x.rs")).expect("rust");
+        let src = "pub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n\n\
+                   #[cfg(test)]\n\
+                   mod tests {\n    \
+                       use super::*;\n    \
+                       #[test]\n    \
+                       fn it_adds() { assert_eq!(add(1, 2), 3); }\n\
+                   }\n";
+        let stripped = lang.strip(src, Path::new("x.rs"), true).expect("strip");
+        assert!(stripped.contains("pub fn add"));
+        assert!(
+            !stripped.contains("cfg(test)"),
+            "cfg(test) attribute remained: {stripped}"
+        );
+        assert!(
+            !stripped.contains("mod tests"),
+            "test module remained: {stripped}"
+        );
+        assert!(
+            !stripped.contains("it_adds"),
+            "test fn remained: {stripped}"
+        );
+    }
+
+    #[test]
+    fn keep_tests_keeps_cfg_test_module() {
+        let reg = Registry::new().expect("registry init");
+        let lang = reg.detect(Path::new("x.rs")).expect("rust");
+        let src = "pub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n\n\
+                   #[cfg(test)]\n\
+                   mod tests {\n    \
+                       #[test]\n    \
+                       fn it_adds() { assert_eq!(add(1, 2), 3); }\n\
+                   }\n";
+        let stripped = lang.strip(src, Path::new("x.rs"), false).expect("strip");
+        assert!(stripped.contains("mod tests"));
+        assert!(stripped.contains("fn it_adds"));
+        assert!(stripped.contains("/* ... */"));
+    }
+
+    #[test]
+    fn drop_tests_removes_top_level_test_function() {
+        let reg = Registry::new().expect("registry init");
+        let lang = reg.detect(Path::new("x.rs")).expect("rust");
+        let src = "pub fn keep() {}\n\n#[test]\nfn freestanding() { assert!(true); }\n";
+        let stripped = lang.strip(src, Path::new("x.rs"), true).expect("strip");
+        assert!(stripped.contains("pub fn keep"));
+        assert!(!stripped.contains("freestanding"));
+        assert!(!stripped.contains("#[test]"));
+    }
+
+    #[test]
+    fn drop_tests_absorbs_other_attributes_on_the_test_module() {
+        let reg = Registry::new().expect("registry init");
+        let lang = reg.detect(Path::new("x.rs")).expect("rust");
+        let src = "pub fn keep() {}\n\n\
+                   #[cfg(test)]\n\
+                   #[allow(clippy::unwrap_used)]\n\
+                   mod tests {\n    \
+                       fn helper() {}\n\
+                   }\n";
+        let stripped = lang.strip(src, Path::new("x.rs"), true).expect("strip");
+        assert!(stripped.contains("pub fn keep"));
+        assert!(
+            !stripped.contains("mod tests"),
+            "test mod remained: {stripped}"
+        );
+        assert!(
+            !stripped.contains("allow(clippy::unwrap_used)"),
+            "orphan attribute remained: {stripped}",
+        );
     }
 }

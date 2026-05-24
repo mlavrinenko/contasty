@@ -32,7 +32,11 @@ Download a pre-built binary from the
 contasty src/ > context.md     # strip a directory
 contasty src/lib.rs            # strip a single file
 contasty                       # default path is "."
+contasty --include-tests src/  # keep #[test] / #[cfg(test)] items
 ```
+
+Tests (`#[test]` functions and `#[cfg(test)]` modules) are dropped from
+the output by default — they're noise for most context-bundle use cases.
 
 ### Adding a language
 

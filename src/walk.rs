@@ -24,13 +24,16 @@ pub struct Stripped {
 /// `root` may be a file or a directory. Unsupported extensions are silently
 /// skipped. Output is sorted by path for deterministic rendering.
 ///
+/// When `drop_tests` is true, `#[cfg(test)]` modules and `#[test]` functions
+/// are removed entirely instead of being shown with their signatures.
+///
 /// # Errors
 ///
 /// - [`AppError::Io`] from reading source files.
 /// - [`AppError::Walk`] from the `ignore` crate.
 /// - [`AppError::LangLoad`] / [`AppError::Query`] / [`AppError::ParseFailed`]
 ///   when a language module misbehaves on a real file.
-pub fn collect(root: &Path) -> Result<Vec<Stripped>, AppError> {
+pub fn collect(root: &Path, drop_tests: bool) -> Result<Vec<Stripped>, AppError> {
     let registry = Registry::new()?;
     let mut out: Vec<Stripped> = Vec::new();
     for entry in WalkBuilder::new(root).build() {
@@ -38,7 +41,7 @@ pub fn collect(root: &Path) -> Result<Vec<Stripped>, AppError> {
         if !is_file(&entry) {
             continue;
         }
-        if let Some(stripped) = strip_one(entry.path(), &registry)? {
+        if let Some(stripped) = strip_one(entry.path(), &registry, drop_tests)? {
             out.push(stripped);
         }
     }
@@ -50,12 +53,16 @@ fn is_file(entry: &ignore::DirEntry) -> bool {
     entry.file_type().is_some_and(|ft| ft.is_file())
 }
 
-fn strip_one(path: &Path, registry: &Registry) -> Result<Option<Stripped>, AppError> {
+fn strip_one(
+    path: &Path,
+    registry: &Registry,
+    drop_tests: bool,
+) -> Result<Option<Stripped>, AppError> {
     let Some(language) = registry.detect(path) else {
         return Ok(None);
     };
     let source = fs::read_to_string(path)?;
-    let content = language.strip(&source, path)?;
+    let content = language.strip(&source, path, drop_tests)?;
     Ok(Some(Stripped {
         path: path.to_path_buf(),
         lang_name: language.name,
@@ -77,7 +84,7 @@ mod tests {
         let mut file = fs::File::create(&path).expect("create");
         writeln!(file, "fn add(lhs: i32, rhs: i32) -> i32 {{ lhs + rhs }}").expect("write");
 
-        let items = collect(tmp.path()).expect("collect");
+        let items = collect(tmp.path(), false).expect("collect");
         assert_eq!(items.len(), 1);
         let item = items.first().expect("one item");
         assert_eq!(item.lang_name, "rust");
@@ -92,7 +99,7 @@ mod tests {
         let path = tmp.path().join("readme.txt");
         fs::write(&path, "plain text").expect("write");
 
-        let items = collect(tmp.path()).expect("collect");
+        let items = collect(tmp.path(), false).expect("collect");
         assert!(items.is_empty());
     }
 
@@ -107,7 +114,7 @@ mod tests {
             .expect("write");
         }
 
-        let items = collect(tmp.path()).expect("collect");
+        let items = collect(tmp.path(), false).expect("collect");
         let names: Vec<_> = items
             .iter()
             .map(|item| {
@@ -118,5 +125,27 @@ mod tests {
             })
             .collect();
         assert_eq!(names, vec!["aaa.rs", "mmm.rs", "zzz.rs"]);
+    }
+
+    #[test]
+    fn collect_drops_tests_when_requested() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let src = "pub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n\n\
+                   #[cfg(test)]\n\
+                   mod tests {\n    \
+                       #[test]\n    \
+                       fn it_works() { assert_eq!(add(1, 1), 2); }\n\
+                   }\n";
+        fs::write(tmp.path().join("a.rs"), src).expect("write");
+
+        let with_tests = collect(tmp.path(), false).expect("with tests");
+        let with_item = with_tests.first().expect("one");
+        assert!(with_item.content.contains("mod tests"));
+
+        let no_tests = collect(tmp.path(), true).expect("no tests");
+        let no_item = no_tests.first().expect("one");
+        assert!(!no_item.content.contains("mod tests"));
+        assert!(!no_item.content.contains("cfg(test)"));
+        assert!(no_item.content.contains("pub fn add"));
     }
 }
