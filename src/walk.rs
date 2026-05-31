@@ -8,7 +8,7 @@ use ignore::WalkBuilder;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::AppError;
-use crate::config::CompactConfig;
+use crate::config::{CompactConfig, Config};
 use crate::lang::Registry;
 
 /// One file's stripped representation, ready for rendering.
@@ -37,16 +37,17 @@ pub struct Stripped {
 ///
 /// - [`AppError::Io`] from reading source files.
 /// - [`AppError::Walk`] from the `ignore` crate.
-/// - [`AppError::LangLoad`] / [`AppError::Query`] / [`AppError::ParseFailed`]
+/// - [`AppError::CustomLang`] when a configured dynamic grammar fails to load.
+/// - [`AppError::Rule`] / [`AppError::RuleParse`] / [`AppError::ParseFailed`]
 ///   when a language module misbehaves on a real file.
 pub fn collect(
     root: &Path,
     drop_tests: bool,
     drop_comments: bool,
     drop_imports: bool,
-    compact: &CompactConfig,
+    config: &Config,
 ) -> Result<Vec<Stripped>, AppError> {
-    let registry = Registry::new()?;
+    let registry = Registry::with_config(&config.custom_languages, &config.base)?;
     // Walk sequentially (gitignore resolution is cheap and inherently serial),
     // then parse + strip the gathered files in parallel — tree-sitter and the
     // `syn`/prettyplease formatting pass dominate the runtime and are per-file
@@ -67,7 +68,7 @@ pub fn collect(
                 drop_tests,
                 drop_comments,
                 drop_imports,
-                compact,
+                &config.compact,
             )
             .transpose()
         })
@@ -123,8 +124,7 @@ mod tests {
         let mut file = fs::File::create(&path).expect("create");
         writeln!(file, "fn add(lhs: i32, rhs: i32) -> i32 {{ lhs + rhs }}").expect("write");
 
-        let items =
-            collect(tmp.path(), false, false, false, &CompactConfig::default()).expect("collect");
+        let items = collect(tmp.path(), false, false, false, &Config::default()).expect("collect");
         assert_eq!(items.len(), 1);
         let item = items.first().expect("one item");
         assert_eq!(item.lang_name, "rust");
@@ -139,8 +139,7 @@ mod tests {
         let path = tmp.path().join("readme.txt");
         fs::write(&path, "plain text").expect("write");
 
-        let items =
-            collect(tmp.path(), false, false, false, &CompactConfig::default()).expect("collect");
+        let items = collect(tmp.path(), false, false, false, &Config::default()).expect("collect");
         assert!(items.is_empty());
     }
 
@@ -155,8 +154,7 @@ mod tests {
             .expect("write");
         }
 
-        let items =
-            collect(tmp.path(), false, false, false, &CompactConfig::default()).expect("collect");
+        let items = collect(tmp.path(), false, false, false, &Config::default()).expect("collect");
         let names: Vec<_> = items
             .iter()
             .map(|item| {
@@ -180,13 +178,13 @@ mod tests {
                    }\n";
         fs::write(tmp.path().join("a.rs"), src).expect("write");
 
-        let with_tests = collect(tmp.path(), false, false, false, &CompactConfig::default())
-            .expect("with tests");
+        let with_tests =
+            collect(tmp.path(), false, false, false, &Config::default()).expect("with tests");
         let with_item = with_tests.first().expect("one");
         assert!(with_item.content.contains("mod tests"));
 
         let no_tests =
-            collect(tmp.path(), true, false, false, &CompactConfig::default()).expect("no tests");
+            collect(tmp.path(), true, false, false, &Config::default()).expect("no tests");
         let no_item = no_tests.first().expect("one");
         assert!(!no_item.content.contains("mod tests"));
         assert!(!no_item.content.contains("cfg(test)"));
@@ -201,14 +199,14 @@ mod tests {
                    // trailing note\n";
         fs::write(tmp.path().join("a.rs"), src).expect("write");
 
-        let with_comments = collect(tmp.path(), false, false, false, &CompactConfig::default())
-            .expect("with comments");
+        let with_comments =
+            collect(tmp.path(), false, false, false, &Config::default()).expect("with comments");
         let with_item = with_comments.first().expect("one");
         assert!(with_item.content.contains("/// kept by default"));
         assert!(with_item.content.contains("// trailing note"));
 
-        let no_comments = collect(tmp.path(), false, true, false, &CompactConfig::default())
-            .expect("no comments");
+        let no_comments =
+            collect(tmp.path(), false, true, false, &Config::default()).expect("no comments");
         let no_item = no_comments.first().expect("one");
         assert!(!no_item.content.contains("kept by default"));
         assert!(!no_item.content.contains("trailing note"));
@@ -222,13 +220,13 @@ mod tests {
                    pub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n";
         fs::write(tmp.path().join("a.rs"), src).expect("write");
 
-        let with_imports = collect(tmp.path(), false, false, false, &CompactConfig::default())
-            .expect("with imports");
+        let with_imports =
+            collect(tmp.path(), false, false, false, &Config::default()).expect("with imports");
         let with_item = with_imports.first().expect("one");
         assert!(with_item.content.contains("use std::collections::HashMap"));
 
         let no_imports =
-            collect(tmp.path(), false, false, true, &CompactConfig::default()).expect("no imports");
+            collect(tmp.path(), false, false, true, &Config::default()).expect("no imports");
         let no_item = no_imports.first().expect("one");
         assert!(!no_item.content.contains("use std::collections::HashMap"));
         assert!(no_item.content.contains("pub fn add"));

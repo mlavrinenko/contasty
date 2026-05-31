@@ -10,29 +10,31 @@
 //! then maps to an [`Action`]. Matching is delegated to ast-grep; this module
 //! owns only the field descent, attribute expansion, and byte-range splicing.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
 
 use ast_grep_config::{DeserializeEnv, RuleCore, SerializableRule, SerializableRuleCore};
 use ast_grep_core::AstGrep;
 use ast_grep_core::tree_sitter::StrDoc;
-use ast_grep_language::SupportLang;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::AppError;
-use crate::config::CompactConfig;
+use crate::config::{CompactConfig, CustomLanguage};
+use crate::lang::dynamic::Lang;
 
+mod dynamic;
 mod rust;
 
-type Doc = StrDoc<SupportLang>;
+type Doc = StrDoc<Lang>;
 type AstNode<'r> = ast_grep_core::Node<'r, Doc>;
 
 /// A registered language: a tree-sitter grammar plus its compiled rule set.
 pub struct Language {
     /// Markdown fence info-string (e.g. `"rust"`).
     pub name: &'static str,
-    lang: SupportLang,
+    lang: Lang,
     rules: Vec<CompiledRule>,
     /// Optional source formatter applied after splicing. Returns `None` if it
     /// cannot handle the (post-strip) source — caller keeps the unformatted
@@ -184,8 +186,7 @@ impl Language {
         format: Option<fn(&str) -> Option<String>>,
     ) -> Result<Self, AppError> {
         let file: RuleFile = serde_yaml::from_str(yaml)?;
-        let lang = SupportLang::from_str(&file.language)
-            .map_err(|_| AppError::Rule(format!("unknown language `{}`", file.language)))?;
+        let lang = Lang::from_str(&file.language)?;
         let rules = file
             .rules
             .into_iter()
@@ -258,7 +259,7 @@ impl Language {
     }
 }
 
-fn compile_rule(lang: SupportLang, spec: RuleSpec) -> Result<CompiledRule, AppError> {
+fn compile_rule(lang: Lang, spec: RuleSpec) -> Result<CompiledRule, AppError> {
     let core = SerializableRuleCore {
         rule: spec.rule,
         constraints: None,
@@ -380,10 +381,44 @@ impl Registry {
         })
     }
 
+    /// Build the registry with the built-ins plus every configured custom
+    /// grammar. Registers the dynamic grammars (process-global, once) and then
+    /// compiles each one's rule file resolved against `base`.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::CustomLang`] if a grammar fails to load or its rule file is
+    /// unreadable; [`AppError::Rule`] / [`AppError::RuleParse`] if a rule file
+    /// is malformed or references kinds the grammar lacks.
+    pub fn with_config(
+        custom: &HashMap<String, CustomLanguage>,
+        base: &Path,
+    ) -> Result<Self, AppError> {
+        let mut registry = Self::new()?;
+        if custom.is_empty() {
+            return Ok(registry);
+        }
+        dynamic::register(base, custom)?;
+        for (name, cfg) in custom {
+            let path = base.join(&cfg.rules);
+            let yaml = std::fs::read_to_string(&path).map_err(|err| {
+                AppError::CustomLang(format!("{name}: rules `{}`: {err}", path.display()))
+            })?;
+            // The grammar outlives the process (the dynamic registry never
+            // unloads), so leaking its display name to `'static` is consistent
+            // and lets it share `Language`'s built-in storage.
+            let leaked: &'static str = Box::leak(name.clone().into_boxed_str());
+            registry
+                .langs
+                .push(Language::from_rules(leaked, &yaml, None)?);
+        }
+        Ok(registry)
+    }
+
     /// Detect a language from a path's file extension.
     #[must_use]
     pub fn detect(&self, path: &Path) -> Option<&Language> {
-        let lang = <SupportLang as ast_grep_core::Language>::from_path(path)?;
+        let lang = <Lang as ast_grep_language::Language>::from_path(path)?;
         self.langs.iter().find(|registered| registered.lang == lang)
     }
 }

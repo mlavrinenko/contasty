@@ -23,6 +23,55 @@ whose name carries the conventional `*Test` suffix. It does not catch `#[Test]`-
 annotated methods inside non-suffixed classes, data providers, or test traits;
 tighten later with relational rules (`has` on the `attributes` field) if needed.
 
+## Custom grammars (dynamic `.so`)
+
+The 28 grammars ast-grep bundles cover the common case with zero `.so`. For a
+language it does not ship, supply a compiled native tree-sitter grammar plus a
+rule file and register it in `contasty.toml` — no rebuild of contasty.
+
+Build the grammar to a native shared library (one per OS/arch — native libraries
+are not portable):
+
+```sh
+tree-sitter build --output mylang.so   # run in the grammar repo
+```
+
+Register it under `[customLanguages.<name>]`. The `<name>` key is the language
+identifier; it must match the rule file's `language:` and (unless overridden)
+fixes the dylib symbol to `tree_sitter_<name>`:
+
+```toml
+[customLanguages.mylang]
+# One library for the current host...
+libraryPath = "grammars/mylang.so"
+extensions = ["ml", "mli"]
+rules = "rules/mylang.yml"
+
+# ...or a per-target-triple map when you ship more than one platform:
+# [customLanguages.mylang.libraryPath]
+# "x86_64-unknown-linux-gnu" = "grammars/mylang-linux.so"
+# "aarch64-apple-darwin"     = "grammars/mylang-mac.dylib"
+
+# Optional overrides:
+# languageSymbol = "tree_sitter_mylang"  # default: tree_sitter_<name>
+# metaVarChar = "$"                       # pattern sigil; default $
+# expandoChar = "_"                       # identifier-safe stand-in for $
+```
+
+Relative `libraryPath` and `rules` paths resolve against the config file's
+directory. The grammar registers once at startup and is never unloaded
+(libloading keeps the library leaked on purpose — dropping it nulls its
+symbols), so every custom grammar must be declared in a single config.
+
+The rule file is identical in format and schema to a built-in's; only its
+`language:` names the custom grammar. Confirm `kind`/`field` names against the
+grammar's `node-types.json` as for any language.
+
+A missing library, wrong symbol, incompatible tree-sitter version, or a target
+absent from a `libraryPath` map fails with an actionable error, not a panic.
+Only native libraries are supported: ast-grep loads grammars through
+`libloading` and has no wasm path.
+
 ## Schema
 
 The rule file format is described by a generated JSON Schema (Draft 2020-12) at

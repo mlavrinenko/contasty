@@ -67,7 +67,7 @@ fn main() -> Result<()> {
         !cli.include_tests,
         !cli.include_comments,
         cli.no_imports,
-        &config.compact,
+        &config,
     )?;
     if cli.stats {
         let report = contasty::stats::compute(&items);

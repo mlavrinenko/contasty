@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -8,6 +9,52 @@ const DEFAULT_CONFIG_NAME: &str = "contasty.toml";
 pub struct Config {
     #[serde(default)]
     pub compact: CompactConfig,
+    /// User-supplied dynamic tree-sitter grammars, keyed by language name. The
+    /// key is the language identifier a rule file's `language:` must name and
+    /// the dylib symbol defaults to `tree_sitter_<key>`.
+    #[serde(default, rename = "customLanguages")]
+    pub custom_languages: HashMap<String, CustomLanguage>,
+    /// Directory the config file lives in. Relative `library_path` / `rules`
+    /// paths resolve against it. Set by [`Config::load`], never deserialized.
+    #[serde(skip)]
+    pub base: PathBuf,
+}
+
+/// One entry of the `[customLanguages]` table: an `ast-grep-dynamic` grammar
+/// plus the contasty rule file driving its strip pass. Field names mirror
+/// `ast_grep_dynamic::CustomLang` so a config carries straight over, with the
+/// extra `rules` pointer contasty needs.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CustomLanguage {
+    /// Compiled grammar: one shared library, or a per-target-triple map (native
+    /// libraries are not portable across OS/arch).
+    pub library_path: LibraryPath,
+    /// Dylib symbol exposing the parser. Defaults to `tree_sitter_<key>`.
+    #[serde(default)]
+    pub language_symbol: Option<String>,
+    /// Metavariable sigil for patterns. Defaults to `$`.
+    #[serde(default)]
+    pub meta_var_char: Option<char>,
+    /// Identifier-safe replacement for grammars that reject `$`.
+    #[serde(default)]
+    pub expando_char: Option<char>,
+    /// File extensions (no dot) this grammar claims.
+    pub extensions: Vec<String>,
+    /// Path to the `rules/<lang>.yml` rule file, relative to the config file.
+    pub rules: PathBuf,
+}
+
+/// Where a custom grammar's shared library lives. Mirrors
+/// `ast_grep_dynamic::LibraryPath` but derives `Debug` so it can sit in
+/// [`Config`].
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum LibraryPath {
+    /// A single library used on every target.
+    Single(PathBuf),
+    /// A target-triple → library map (e.g. `x86_64-unknown-linux-gnu`).
+    Platform(HashMap<String, PathBuf>),
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,7 +85,12 @@ const fn default_max_string_bytes() -> usize {
 impl Config {
     pub fn load(from_path: Option<&Path>, working_dir: &Path) -> Self {
         let path = from_path.map_or_else(|| working_dir.join(DEFAULT_CONFIG_NAME), PathBuf::from);
-        Self::load_file(&path).unwrap_or_default()
+        let mut config = Self::load_file(&path).unwrap_or_default();
+        config.base = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .map_or_else(|| working_dir.to_path_buf(), Path::to_path_buf);
+        config
     }
 
     fn load_file(path: &Path) -> Option<Self> {

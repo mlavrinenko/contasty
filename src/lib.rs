@@ -39,6 +39,11 @@ pub enum AppError {
     #[error("rule: {0}")]
     Rule(String),
 
+    /// A custom dynamic grammar could not be registered or its rule file read
+    /// (missing library, wrong symbol, incompatible target, unreadable rules).
+    #[error("custom language: {0}")]
+    CustomLang(String),
+
     /// Tree-sitter produced no tree (e.g. parser was cancelled).
     #[error("parse failed: {}", path.display())]
     ParseFailed {
