@@ -373,11 +373,10 @@ impl Registry {
     /// set fails to parse or compile. This is effectively a build-time bug.
     pub fn new() -> Result<Self, AppError> {
         Ok(Self {
-            langs: vec![Language::from_rules(
-                "rust",
-                rust::RULES,
-                Some(rust::format),
-            )?],
+            langs: vec![
+                Language::from_rules("rust", rust::RULES, Some(rust::format))?,
+                Language::from_rules("php", include_str!("rules/php.yml"), None)?,
+            ],
         })
     }
 

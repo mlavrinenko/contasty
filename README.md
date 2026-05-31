@@ -11,7 +11,7 @@ with [tree-sitter](https://tree-sitter.github.io/), elides function bodies, and
 prints the result as a single Markdown document — declarations, signatures, and
 types intact, ready to paste into an LLM context window.
 
-Supported languages: Rust.
+Supported languages: Rust, PHP.
 
 ## Install
 

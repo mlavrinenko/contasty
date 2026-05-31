@@ -7,6 +7,22 @@ per-language matching logic in Rust.
 
 [ast-grep]: https://ast-grep.github.io
 
+## Supported languages
+
+| Language | Rule file                  | Test detection                                   |
+| -------- | -------------------------- | ------------------------------------------------ |
+| Rust     | `src/lang/rules/rust.yml`  | `#[test]` / `#[cfg(test)]` items.                |
+| PHP      | `src/lang/rules/php.yml`   | `class_declaration` whose name ends in `Test`.   |
+
+PHP binds tree-sitter-php's `php_only` grammar (the variant ast-grep's
+`SupportLang::Php` uses), so kinds/fields come from `php_only/src/node-types.json`.
+It has no post-strip formatter wired (`format` is `None`).
+
+PHPUnit test detection is a deliberately small heuristic: it deletes classes
+whose name carries the conventional `*Test` suffix. It does not catch `#[Test]`-
+annotated methods inside non-suffixed classes, data providers, or test traits;
+tighten later with relational rules (`has` on the `attributes` field) if needed.
+
 ## Schema
 
 The rule file format is described by a generated JSON Schema (Draft 2020-12) at

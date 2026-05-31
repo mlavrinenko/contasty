@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# PHP strip rules. Each entry selects an anchor node via an ast-grep rule, then
+# acts on it (optionally descending into a named field first). Kinds/fields are
+# tree-sitter-php (`php_only` grammar, the variant ast-grep's SupportLang::Php
+# binds). See the schema and docs/languages.md for the rule grammar.
+language: php
+rules:
+  # Elide function / method / closure bodies (each a `compound_statement`).
+  # Abstract method declarations have no `body` field and are left verbatim.
+  - action: elide
+    field: body
+    rule:
+      any:
+        - kind: function_definition
+        - kind: method_declaration
+        - kind: anonymous_function
+
+  # Truncate long string literals: single-quoted (`string`) and double-quoted /
+  # interpolated (`encapsed_string`). Heredocs/nowdocs are left intact.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      any:
+        - kind: string
+        - kind: encapsed_string
+
+  # Drop every comment (`//`, `#`, `/* */`, `/** */`) under --include-comments
+  # off. PHP attributes (`#[Attr]`) are a distinct kind and are not touched.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment
+
+  # Drop `use` imports under --no-imports. `namespace` declarations are
+  # structure, not imports, so they are kept (mirrors the Rust `use`-only drop).
+  - action: delete
+    when: imports
+    rule:
+      kind: namespace_use_declaration
+
+  # Drop PHPUnit test classes under --no-tests: a `class_declaration` whose name
+  # ends in `Test`. Heuristic — catches the conventional `*Test` suffix; misses
+  # `#[Test]`-annotated methods in non-suffixed classes (see docs/languages.md).
+  - action: delete
+    when: tests
+    rule:
+      kind: class_declaration
+      has:
+        field: name
+        regex: Test$
