@@ -41,3 +41,15 @@ When a file exceeds the limit, split it into modules or separate documents.
 1. Run `just check` before submitting — it runs clippy, tests, and file size checks
 2. Run `just fmt` to format code
 3. Ensure `just cover` meets the 70% threshold
+
+## Task References
+
+Every commit footer carries a `Refs:` pointing at the task file it advances:
+
+```
+Refs: tasks/01-engine-swap.md
+```
+
+Tasks live in `tasks/`, one Markdown file per task, each sized for a single dense
+session. See `tasks/README.md` for the index and conventions. A commit that does
+not advance a planned task uses `Refs: tasks/README.md`.
