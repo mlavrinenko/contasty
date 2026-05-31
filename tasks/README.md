@@ -27,12 +27,13 @@ contasty's splice engine (`src/lang/mod.rs`) is kept. ast-grep replaces only the
 - [x] 01 — Engine swap + rule-driven strip core (`01-engine-swap.md`)
 - [x] 02 — Strict typing: JSON Schema + editor integration (`02-yaml-schema.md`)
 - [x] 03 — PHP language, zero Rust (`03-php-language.md`)
-- [ ] 04 — Custom `.so` grammars via ast-grep-dynamic (`04-dynamic-languages.md`)
+- [x] 04 — Custom `.so` grammars via ast-grep-dynamic (`04-dynamic-languages.md`)
+- [ ] 05 — User-extensible & overridable rule sets (`05-custom-rules.md`)
 
 01 is foundational and ships Rust support on the new engine. 02 locks the rule
 file format down with a generated schema. 03 proves the zero-code claim by adding
-PHP as YAML only. 04 is the extensibility path for unbundled grammars; optional,
-last.
+PHP as YAML only. 04 is the extensibility path for unbundled grammars. 05 lets
+users extend or override a language's standard rules from config.
 
 ## Key facts (verified against var/ast-grep @ 0.43.0)
 
