@@ -16,7 +16,7 @@ pub mod stats;
 mod walk;
 
 pub use lang::Registry;
-pub use render::render_markdown;
+pub use render::{render_json, render_markdown};
 pub use walk::{Stripped, collect};
 
 /// Errors produced by the contasty library.

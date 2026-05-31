@@ -34,7 +34,12 @@ contasty src/lib.rs               # strip a single file
 contasty                          # default path is "."
 contasty --include-tests src/     # keep #[test] / #[cfg(test)] items
 contasty --include-comments src/  # keep every comment (doc comments included)
+contasty --format=json src/       # emit a JSON bundle instead of Markdown
 ```
+
+Output defaults to Markdown. Pass `--output=json` for a pretty-printed JSON
+bundle shaped as `{ "base": <dir>, "files": [{ "path", "lang", "content" }] }`,
+mirroring the Markdown layout.
 
 Tests (`#[test]` functions and `#[cfg(test)]` modules) and comments (every
 `//`, `///`, `//!`, `/* */`, `/** */`, `/*! */`) are dropped from the output

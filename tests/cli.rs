@@ -66,3 +66,24 @@ fn cli_drops_comments_by_default_and_keeps_them_with_include_comments() {
         .stdout(contains("/// doc for greet"))
         .stdout(contains("// trailing note"));
 }
+
+#[test]
+fn cli_renders_json_with_format_flag() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    fs::write(
+        tmp.path().join("sample.rs"),
+        "pub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n",
+    )
+    .expect("write");
+
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg("--format=json")
+        .arg(tmp.path())
+        .assert()
+        .success()
+        .stdout(contains("\"lang\": \"rust\""))
+        .stdout(contains("\"content\":"))
+        .stdout(contains("pub fn add(lhs: i32, rhs: i32) -> i32"))
+        .stdout(contains("```rust").not());
+}

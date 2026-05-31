@@ -261,6 +261,7 @@ dependencies = [
  "predicates",
  "prettyplease",
  "serde",
+ "serde_json",
  "syn",
  "tempfile",
  "thiserror 2.0.18",

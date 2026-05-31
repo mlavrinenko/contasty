@@ -1,7 +1,9 @@
-//! Markdown rendering of stripped files.
+//! Rendering of stripped files as Markdown or JSON.
 
 use std::fmt::Write;
 use std::path::PathBuf;
+
+use serde::Serialize;
 
 use crate::walk::Stripped;
 
@@ -55,6 +57,50 @@ pub fn render_markdown(items: &[Stripped]) -> String {
         );
     }
     out
+}
+
+/// One file in the JSON bundle: its base-relative path, language, and body.
+#[derive(Serialize)]
+struct JsonFile<'src> {
+    path: String,
+    lang: &'src str,
+    content: &'src str,
+}
+
+/// Top-level JSON bundle mirroring the Markdown layout.
+#[derive(Serialize)]
+struct JsonBundle<'src> {
+    base: String,
+    files: Vec<JsonFile<'src>>,
+}
+
+/// Render a list of stripped files as a single pretty-printed JSON document.
+///
+/// Mirrors [`render_markdown`]: `base` holds the shared base directory and each
+/// entry in `files` carries a path relative to that base. Empty input yields a
+/// valid bundle with an empty `files` array.
+#[must_use]
+pub fn render_json(items: &[Stripped]) -> String {
+    let paths: Vec<_> = items.iter().map(|item| item.path.clone()).collect();
+    let base = common_base(&paths);
+
+    let files = items
+        .iter()
+        .map(|item| {
+            let rel = item.path.strip_prefix(&base).unwrap_or(&item.path);
+            JsonFile {
+                path: rel.display().to_string(),
+                lang: item.lang_name,
+                content: item.content.trim_end(),
+            }
+        })
+        .collect();
+
+    let bundle = JsonBundle {
+        base: base.display().to_string(),
+        files,
+    };
+    serde_json::to_string_pretty(&bundle).unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -114,6 +160,42 @@ mod tests {
             md[a_pos..b_pos].contains("```\n\n"),
             "no blank line between files: {md}"
         );
+    }
+
+    #[test]
+    fn render_json_emits_base_and_relative_paths() {
+        let items = vec![
+            Stripped {
+                path: PathBuf::from("src/lib.rs"),
+                lang_name: "rust",
+                original: String::new(),
+                content: "pub fn greet() {}".to_owned(),
+            },
+            Stripped {
+                path: PathBuf::from("src/main.rs"),
+                lang_name: "rust",
+                original: String::new(),
+                content: "fn main() {}".to_owned(),
+            },
+        ];
+        let json = render_json(&items);
+        let value: serde_json::Value = serde_json::from_str(&json).expect("valid json");
+        let str_at = |ptr: &str| value.pointer(ptr).and_then(serde_json::Value::as_str);
+        assert_eq!(str_at("/base"), Some("src"));
+        assert_eq!(str_at("/files/0/path"), Some("lib.rs"));
+        assert_eq!(str_at("/files/0/lang"), Some("rust"));
+        assert_eq!(str_at("/files/1/path"), Some("main.rs"));
+    }
+
+    #[test]
+    fn render_json_with_no_items_is_valid_empty_bundle() {
+        let json = render_json(&[]);
+        let value: serde_json::Value = serde_json::from_str(&json).expect("valid json");
+        let files = value
+            .pointer("/files")
+            .and_then(serde_json::Value::as_array)
+            .expect("files array");
+        assert!(files.is_empty());
     }
 
     #[test]
