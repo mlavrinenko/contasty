@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use ignore::WalkBuilder;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::AppError;
 use crate::config::CompactConfig;
@@ -44,18 +45,23 @@ pub fn collect(
     compact: &CompactConfig,
 ) -> Result<Vec<Stripped>, AppError> {
     let registry = Registry::new()?;
-    let mut out: Vec<Stripped> = Vec::new();
+    // Walk sequentially (gitignore resolution is cheap and inherently serial),
+    // then parse + strip the gathered files in parallel — tree-sitter and the
+    // `syn`/prettyplease formatting pass dominate the runtime and are per-file
+    // independent. `Registry` is `Sync`, so one instance is shared read-only.
+    let mut paths: Vec<PathBuf> = Vec::new();
     for entry in WalkBuilder::new(root).build() {
         let entry = entry?;
-        if !is_file(&entry) {
-            continue;
-        }
-        if let Some(stripped) =
-            strip_one(entry.path(), &registry, drop_tests, drop_comments, compact)?
-        {
-            out.push(stripped);
+        if is_file(&entry) {
+            paths.push(entry.into_path());
         }
     }
+    let mut out: Vec<Stripped> = paths
+        .par_iter()
+        .filter_map(|path| {
+            strip_one(path, &registry, drop_tests, drop_comments, compact).transpose()
+        })
+        .collect::<Result<Vec<Stripped>, AppError>>()?;
     out.sort_by(|left, right| left.path.cmp(&right.path));
     Ok(out)
 }

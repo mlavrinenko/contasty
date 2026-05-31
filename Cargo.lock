@@ -260,6 +260,7 @@ dependencies = [
  "ignore",
  "predicates",
  "prettyplease",
+ "rayon",
  "serde",
  "serde_json",
  "syn",
