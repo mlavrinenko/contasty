@@ -40,6 +40,9 @@ pub struct Language {
     /// Captures whose ranges are removed entirely (comments). No attribute
     /// expansion — each capture stands alone.
     comment_query: Query,
+    /// Captures whose ranges are removed entirely (`use` declarations). No
+    /// attribute expansion — each capture stands alone.
+    import_query: Query,
     /// Optional source formatter applied after splicing. Returns `None` if the
     /// formatter cannot handle the (post-strip) source — caller keeps the
     /// unformatted output rather than failing the whole file.
@@ -62,6 +65,7 @@ impl Language {
     /// items (`#[test]` / `#[cfg(test)]`) are removed entirely. When
     /// `drop_comments` is true, every `line_comment` and `block_comment` is
     /// removed (doc comments included — the caller asked for all-or-nothing).
+    /// When `drop_imports` is true, every `use` declaration is removed.
     ///
     /// # Errors
     ///
@@ -74,10 +78,18 @@ impl Language {
         path: &Path,
         drop_tests: bool,
         drop_comments: bool,
+        drop_imports: bool,
         compact: &crate::config::CompactConfig,
     ) -> Result<String, AppError> {
         let tree = self.parse(source, path)?;
-        let ranges = self.collect_all(&tree, source, drop_tests, drop_comments, compact);
+        let ranges = self.collect_all(
+            &tree,
+            source,
+            drop_tests,
+            drop_comments,
+            drop_imports,
+            compact,
+        );
         let spliced = splice(source, &ranges);
         // Only format when comments are being dropped: source-level formatters
         // like prettyplease parse via `syn`, which discards non-doc comments —
@@ -108,6 +120,7 @@ impl Language {
         source: &str,
         drop_tests: bool,
         drop_comments: bool,
+        drop_imports: bool,
         compact: &crate::config::CompactConfig,
     ) -> Vec<(usize, usize, Action)> {
         let mut ranges = Vec::new();
@@ -135,6 +148,16 @@ impl Language {
         if drop_comments {
             collect_ranges(
                 &self.comment_query,
+                tree,
+                source,
+                Action::Delete,
+                0,
+                &mut ranges,
+            );
+        }
+        if drop_imports {
+            collect_ranges(
+                &self.import_query,
                 tree,
                 source,
                 Action::Delete,

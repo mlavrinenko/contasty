@@ -66,6 +66,12 @@ const COMMENT_QUERY: &str = r"
 (block_comment) @comment
 ";
 
+/// Every `use` declaration. Removed entirely when the caller opts to drop
+/// imports — an import list rarely helps an LLM grasp a file's structure.
+const IMPORT_QUERY: &str = r"
+(use_declaration) @import
+";
+
 /// Build the Rust language descriptor.
 ///
 /// # Errors
@@ -82,6 +88,7 @@ pub fn language() -> Result<Language, AppError> {
     let string_trim_query = Some(Query::new(grammar, STRING_TRIM_QUERY)?);
     let test_query = Query::new(grammar, TEST_QUERY)?;
     let comment_query = Query::new(grammar, COMMENT_QUERY)?;
+    let import_query = Query::new(grammar, IMPORT_QUERY)?;
     Ok(Language {
         name: "rust",
         extensions: EXTENSIONS,
@@ -93,6 +100,7 @@ pub fn language() -> Result<Language, AppError> {
         string_trim_query,
         test_query,
         comment_query,
+        import_query,
         format: Some(format),
     })
 }

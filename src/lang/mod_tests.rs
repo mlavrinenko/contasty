@@ -57,6 +57,7 @@ fn registry_strips_a_rust_file() {
             Path::new("x.rs"),
             false,
             false,
+            false,
             &CompactConfig::default(),
         )
         .expect("strip");
@@ -81,6 +82,7 @@ fn drop_tests_removes_cfg_test_module() {
             src,
             Path::new("x.rs"),
             true,
+            false,
             false,
             &CompactConfig::default(),
         )
@@ -116,6 +118,7 @@ fn keep_tests_keeps_cfg_test_module() {
             Path::new("x.rs"),
             false,
             false,
+            false,
             &CompactConfig::default(),
         )
         .expect("strip");
@@ -134,6 +137,7 @@ fn drop_tests_removes_top_level_test_function() {
             src,
             Path::new("x.rs"),
             true,
+            false,
             false,
             &CompactConfig::default(),
         )
@@ -158,6 +162,7 @@ fn drop_tests_absorbs_other_attributes_on_the_test_module() {
             src,
             Path::new("x.rs"),
             true,
+            false,
             false,
             &CompactConfig::default(),
         )
@@ -190,6 +195,7 @@ fn drop_comments_removes_line_block_and_doc_comments() {
             Path::new("x.rs"),
             false,
             true,
+            false,
             &CompactConfig::default(),
         )
         .expect("strip");
@@ -231,9 +237,36 @@ fn keep_comments_keeps_everything() {
             Path::new("x.rs"),
             false,
             false,
+            false,
             &CompactConfig::default(),
         )
         .expect("strip");
     assert!(stripped.contains("/// doc"));
     assert!(stripped.contains("// trailing"));
+}
+
+#[test]
+fn drop_imports_removes_use_declarations() {
+    let reg = Registry::new().expect("registry init");
+    let lang = reg.detect(Path::new("x.rs")).expect("rust");
+    let src = "use std::fmt;\nuse crate::foo::Bar;\npub fn keep() {}\n";
+    let stripped = lang
+        .strip(
+            src,
+            Path::new("x.rs"),
+            false,
+            false,
+            true,
+            &CompactConfig::default(),
+        )
+        .expect("strip");
+    assert!(stripped.contains("pub fn keep"));
+    assert!(
+        !stripped.contains("use std::fmt"),
+        "use remained: {stripped}"
+    );
+    assert!(
+        !stripped.contains("crate::foo::Bar"),
+        "use remained: {stripped}"
+    );
 }

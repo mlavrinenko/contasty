@@ -19,6 +19,8 @@ enum OutputFormat {
 /// behind — a tasty context bundle for your LLM.
 #[derive(Parser)]
 #[command(version, about)]
+// A CLI flag bag: independent on/off switches, not a state machine.
+#[allow(clippy::struct_excessive_bools)]
 struct Cli {
     /// Directory or file to process. Walks `.gitignore`-aware.
     #[arg(default_value = ".")]
@@ -33,6 +35,12 @@ struct Cli {
     /// Off by default — comments are noise for most context-bundle use cases.
     #[arg(long)]
     include_comments: bool,
+
+    /// Drop every `use` declaration from the output.
+    /// Off by default — opt in to shed import lists, which rarely help an LLM
+    /// grasp a file's structure.
+    #[arg(long)]
+    no_imports: bool,
 
     /// Print compactization statistics instead of the stripped code.
     /// Shows original vs compacted line counts (code, comments, blanks).
@@ -58,6 +66,7 @@ fn main() -> Result<()> {
         &cli.path,
         !cli.include_tests,
         !cli.include_comments,
+        cli.no_imports,
         &config.compact,
     )?;
     if cli.stats {
