@@ -47,7 +47,7 @@ pub fn collect(
     drop_imports: bool,
     config: &Config,
 ) -> Result<Vec<Stripped>, AppError> {
-    let registry = Registry::with_config(&config.custom_languages, &config.base)?;
+    let registry = Registry::with_config(config)?;
     // Walk sequentially (gitignore resolution is cheap and inherently serial),
     // then parse + strip the gathered files in parallel — tree-sitter and the
     // `syn`/prettyplease formatting pass dominate the runtime and are per-file

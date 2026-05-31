@@ -10,7 +10,6 @@
 //! then maps to an [`Action`]. Matching is delegated to ast-grep; this module
 //! owns only the field descent, attribute expansion, and byte-range splicing.
 
-use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -21,10 +20,11 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::AppError;
-use crate::config::{CompactConfig, CustomLanguage};
+use crate::config::{CompactConfig, Config};
 use crate::lang::dynamic::Lang;
 
 mod dynamic;
+mod overrides;
 mod rust;
 
 type Doc = StrDoc<Lang>;
@@ -382,36 +382,38 @@ impl Registry {
     }
 
     /// Build the registry with the built-ins plus every configured custom
-    /// grammar. Registers the dynamic grammars (process-global, once) and then
-    /// compiles each one's rule file resolved against `base`.
+    /// grammar, then apply the per-language rule overrides. Registers the
+    /// dynamic grammars (process-global, once), compiles each one's rule file,
+    /// and finally extends/replaces any language named under `[rules.<lang>]`.
+    /// All paths resolve against the config file's directory.
     ///
     /// # Errors
     ///
     /// [`AppError::CustomLang`] if a grammar fails to load or its rule file is
-    /// unreadable; [`AppError::Rule`] / [`AppError::RuleParse`] if a rule file
-    /// is malformed or references kinds the grammar lacks.
-    pub fn with_config(
-        custom: &HashMap<String, CustomLanguage>,
-        base: &Path,
-    ) -> Result<Self, AppError> {
+    /// unreadable; [`AppError::Config`] if a `[rules.<lang>]` entry is malformed
+    /// (both/neither mode key, unknown language, unreadable file, mismatched
+    /// `language:`); [`AppError::Rule`] / [`AppError::RuleParse`] if any rule
+    /// file is malformed or references kinds the grammar lacks.
+    pub fn with_config(config: &Config) -> Result<Self, AppError> {
         let mut registry = Self::new()?;
-        if custom.is_empty() {
-            return Ok(registry);
+        let base = config.base.as_path();
+        if !config.custom_languages.is_empty() {
+            dynamic::register(base, &config.custom_languages)?;
+            for (name, cfg) in &config.custom_languages {
+                let path = base.join(&cfg.rules);
+                let yaml = std::fs::read_to_string(&path).map_err(|err| {
+                    AppError::CustomLang(format!("{name}: rules `{}`: {err}", path.display()))
+                })?;
+                // The grammar outlives the process (the dynamic registry never
+                // unloads), so leaking its display name to `'static` is consistent
+                // and lets it share `Language`'s built-in storage.
+                let leaked: &'static str = Box::leak(name.clone().into_boxed_str());
+                registry
+                    .langs
+                    .push(Language::from_rules(leaked, &yaml, None)?);
+            }
         }
-        dynamic::register(base, custom)?;
-        for (name, cfg) in custom {
-            let path = base.join(&cfg.rules);
-            let yaml = std::fs::read_to_string(&path).map_err(|err| {
-                AppError::CustomLang(format!("{name}: rules `{}`: {err}", path.display()))
-            })?;
-            // The grammar outlives the process (the dynamic registry never
-            // unloads), so leaking its display name to `'static` is consistent
-            // and lets it share `Language`'s built-in storage.
-            let leaked: &'static str = Box::leak(name.clone().into_boxed_str());
-            registry
-                .langs
-                .push(Language::from_rules(leaked, &yaml, None)?);
-        }
+        registry.apply_overrides(&config.rules, base)?;
         Ok(registry)
     }
 

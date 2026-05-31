@@ -72,6 +72,12 @@ absent from a `libraryPath` map fails with an actionable error, not a panic.
 Only native libraries are supported: ast-grep loads grammars through
 `libloading` and has no wasm path.
 
+## Overriding a language's rules
+
+A built-in or dynamic language can be pointed at a user rule file that extends or
+replaces its standard rules, with no rebuild — see
+[custom-rules.md](custom-rules.md).
+
 ## Schema
 
 The rule file format is described by a generated JSON Schema (Draft 2020-12) at
