@@ -1,58 +1,71 @@
 //! Language registry and source-stripping core.
 //!
-//! Adding a language is a three-step recipe:
+//! Adding a language is a two-step recipe and needs no per-language Rust logic:
 //!
-//! 1. Add a `tree-sitter-<lang>` dependency.
-//! 2. Drop a sibling module here that returns a [`Language`] (grammar + elide
-//!    query + test-drop query + file extensions).
-//! 3. Register it inside [`Registry::new`].
+//! 1. Drop a `rules/<lang>.yml` ast-grep rule set beside this module.
+//! 2. Register it in [`Registry::new`] with a display name (and an optional
+//!    post-strip formatter).
 //!
-//! Everything else — extension dispatch, parsing, byte-range splicing — is
-//! language-agnostic and lives in this module.
+//! Each rule selects an anchor node, optionally descends into a named field,
+//! then maps to an [`Action`]. Matching is delegated to ast-grep; this module
+//! owns only the field descent, attribute expansion, and byte-range splicing.
 
 use std::path::Path;
+use std::str::FromStr;
 
-use tree_sitter::{Parser, Query, QueryCursor};
+use ast_grep_config::{DeserializeEnv, RuleCore, SerializableRule, SerializableRuleCore};
+use ast_grep_core::AstGrep;
+use ast_grep_core::tree_sitter::StrDoc;
+use ast_grep_language::SupportLang;
+use serde::Deserialize;
 
 use crate::AppError;
+use crate::config::CompactConfig;
 
 mod rust;
 
-/// A registered language: grammar + tree-sitter queries.
+type Doc = StrDoc<SupportLang>;
+type AstNode<'r> = ast_grep_core::Node<'r, Doc>;
+
+/// A registered language: a tree-sitter grammar plus its compiled rule set.
 pub struct Language {
     /// Markdown fence info-string (e.g. `"rust"`).
     pub name: &'static str,
-    extensions: &'static [&'static str],
-    grammar: tree_sitter::Language,
-    /// Captures whose ranges become `ELISION` (function bodies).
-    elide_query: Query,
-    /// Captures whose ranges become `ELISION` (const value expressions).
-    const_elide_query: Option<Query>,
-    /// Captures whose ranges become `ELISION` (static value expressions).
-    static_elide_query: Option<Query>,
-    /// Captures whose ranges become `ELISION` (type alias values).
-    type_elide_query: Option<Query>,
-    /// Captures whose ranges become `STR_TRUNCATION` (string literals).
-    string_trim_query: Option<Query>,
-    /// Captures whose ranges are removed entirely. Each match's captures are
-    /// merged into one range so attribute + item collapse together.
-    test_query: Query,
-    /// Captures whose ranges are removed entirely (comments). No attribute
-    /// expansion — each capture stands alone.
-    comment_query: Query,
-    /// Captures whose ranges are removed entirely (`use` declarations). No
-    /// attribute expansion — each capture stands alone.
-    import_query: Query,
-    /// Optional source formatter applied after splicing. Returns `None` if the
-    /// formatter cannot handle the (post-strip) source — caller keeps the
-    /// unformatted output rather than failing the whole file.
+    lang: SupportLang,
+    rules: Vec<CompiledRule>,
+    /// Optional source formatter applied after splicing. Returns `None` if it
+    /// cannot handle the (post-strip) source — caller keeps the unformatted
+    /// output rather than failing the whole file.
     format: Option<fn(&str) -> Option<String>>,
+}
+
+/// One compiled strip rule: an ast-grep matcher plus what to do with its hits.
+struct CompiledRule {
+    matcher: RuleCore,
+    action: Action,
+    /// Named field to descend into on the matched node before acting. `None`
+    /// acts on the matched node itself; a missing field skips the match.
+    field: Option<String>,
+    /// When this rule runs relative to the caller's drop flags.
+    gate: Gate,
+    /// Minimum captured byte length for the match to count. `None` means zero.
+    min_bytes: Option<Threshold>,
+    /// Absorb adjacent attribute siblings + the decorated item into one range.
+    expand_attributes: bool,
+}
+
+/// Which gated rule groups run, plus the size thresholds for this strip pass.
+struct StripOptions<'cfg> {
+    drop_tests: bool,
+    drop_comments: bool,
+    drop_imports: bool,
+    compact: &'cfg CompactConfig,
 }
 
 /// What to do with a captured byte range.
 #[derive(Clone, Copy)]
 enum Action {
-    /// Replace with `ELISION}`.
+    /// Replace with `ELISION`.
     Elide,
     /// Remove the range plus one trailing newline if present.
     Delete,
@@ -60,17 +73,120 @@ enum Action {
     TruncateString,
 }
 
+// --- Rule file schema (deserialized from `rules/<lang>.yml`) ---------------
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RuleFile {
+    language: String,
+    rules: Vec<RuleSpec>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+struct RuleSpec {
+    action: RuleAction,
+    rule: SerializableRule,
+    #[serde(default)]
+    field: Option<String>,
+    #[serde(default)]
+    when: Gate,
+    #[serde(default)]
+    min_bytes: Option<Threshold>,
+    #[serde(default)]
+    expand_attributes: bool,
+}
+
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "kebab-case")]
+enum RuleAction {
+    Elide,
+    Delete,
+    Truncate,
+}
+
+impl From<RuleAction> for Action {
+    fn from(action: RuleAction) -> Self {
+        match action {
+            RuleAction::Elide => Self::Elide,
+            RuleAction::Delete => Self::Delete,
+            RuleAction::Truncate => Self::TruncateString,
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Copy, Default)]
+#[serde(rename_all = "kebab-case")]
+enum Gate {
+    #[default]
+    Always,
+    Tests,
+    Comments,
+    Imports,
+}
+
+impl Gate {
+    const fn enabled(self, opts: &StripOptions) -> bool {
+        match self {
+            Self::Always => true,
+            Self::Tests => opts.drop_tests,
+            Self::Comments => opts.drop_comments,
+            Self::Imports => opts.drop_imports,
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "kebab-case")]
+enum Threshold {
+    ElideMin,
+    MaxString,
+}
+
+impl Threshold {
+    const fn resolve(self, compact: &CompactConfig) -> usize {
+        match self {
+            Self::ElideMin => compact.elide_min_bytes,
+            Self::MaxString => compact.max_string_bytes,
+        }
+    }
+}
+
 impl Language {
-    /// Strip elidable nodes from `source`. When `drop_tests` is true, test
-    /// items (`#[test]` / `#[cfg(test)]`) are removed entirely. When
-    /// `drop_comments` is true, every `line_comment` and `block_comment` is
-    /// removed (doc comments included — the caller asked for all-or-nothing).
-    /// When `drop_imports` is true, every `use` declaration is removed.
+    /// Compile a language descriptor from an embedded ast-grep rule set.
     ///
     /// # Errors
     ///
-    /// - [`AppError::LangLoad`] if tree-sitter rejects the grammar.
-    /// - [`AppError::ParseFailed`] if tree-sitter cannot produce a parse tree.
+    /// [`AppError::RuleParse`] if the YAML is malformed, [`AppError::Rule`] if
+    /// the declared language is unknown or any rule fails to compile against the
+    /// grammar.
+    fn from_rules(
+        name: &'static str,
+        yaml: &str,
+        format: Option<fn(&str) -> Option<String>>,
+    ) -> Result<Self, AppError> {
+        let file: RuleFile = serde_yaml::from_str(yaml)?;
+        let lang = SupportLang::from_str(&file.language)
+            .map_err(|_| AppError::Rule(format!("unknown language `{}`", file.language)))?;
+        let rules = file
+            .rules
+            .into_iter()
+            .map(|spec| compile_rule(lang, spec))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            name,
+            lang,
+            rules,
+            format,
+        })
+    }
+
+    /// Strip elidable nodes from `source`. The `drop_*` flags gate the test,
+    /// comment, and import rules respectively.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::ParseFailed`] if tree-sitter cannot produce a parse tree.
     #[allow(clippy::too_many_arguments)]
     pub fn strip(
         &self,
@@ -79,21 +195,21 @@ impl Language {
         drop_tests: bool,
         drop_comments: bool,
         drop_imports: bool,
-        compact: &crate::config::CompactConfig,
+        compact: &CompactConfig,
     ) -> Result<String, AppError> {
-        let tree = self.parse(source, path)?;
-        let ranges = self.collect_all(
-            &tree,
-            source,
+        let grep = AstGrep::try_new(source, self.lang).map_err(|_| AppError::ParseFailed {
+            path: path.to_path_buf(),
+        })?;
+        let opts = StripOptions {
             drop_tests,
             drop_comments,
             drop_imports,
             compact,
-        );
+        };
+        let ranges = self.collect(&grep, &opts);
         let spliced = splice(source, &ranges);
-        // Only format when comments are being dropped: source-level formatters
-        // like prettyplease parse via `syn`, which discards non-doc comments —
-        // running it under `--include-comments` would silently lose them.
+        // Only format when comments are dropped: `syn`-based formatters discard
+        // non-doc comments, so formatting under --include-comments would lose them.
         if !drop_comments {
             return Ok(spliced);
         }
@@ -103,130 +219,126 @@ impl Language {
             .unwrap_or(spliced))
     }
 
-    fn parse(&self, source: &str, path: &Path) -> Result<tree_sitter::Tree, AppError> {
-        let mut parser = Parser::new();
-        parser.set_language(self.grammar)?;
-        parser
-            .parse(source, None)
-            .ok_or_else(|| AppError::ParseFailed {
-                path: path.to_path_buf(),
-            })
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn collect_all(
-        &self,
-        tree: &tree_sitter::Tree,
-        source: &str,
-        drop_tests: bool,
-        drop_comments: bool,
-        drop_imports: bool,
-        compact: &crate::config::CompactConfig,
-    ) -> Vec<(usize, usize, Action)> {
+    fn collect(&self, grep: &AstGrep<Doc>, opts: &StripOptions) -> Vec<(usize, usize, Action)> {
+        let root = grep.root();
         let mut ranges = Vec::new();
-        let min = compact.elide_min_bytes;
-        let trim = compact.max_string_bytes;
-        let opt_queries = [
-            (Some(&self.elide_query), Action::Elide, 0),
-            (self.const_elide_query.as_ref(), Action::Elide, min),
-            (self.static_elide_query.as_ref(), Action::Elide, min),
-            (self.type_elide_query.as_ref(), Action::Elide, min),
-            (
-                self.string_trim_query.as_ref(),
-                Action::TruncateString,
-                trim,
-            ),
-        ];
-        for (query, action, threshold) in opt_queries {
-            if let Some(q) = query {
-                collect_ranges(q, tree, source, action, threshold, &mut ranges);
+        for rule in &self.rules {
+            if !rule.gate.enabled(opts) {
+                continue;
             }
-        }
-        if drop_tests {
-            collect_tests(&self.test_query, tree, source, &mut ranges);
-        }
-        if drop_comments {
-            collect_ranges(
-                &self.comment_query,
-                tree,
-                source,
-                Action::Delete,
-                0,
-                &mut ranges,
-            );
-        }
-        if drop_imports {
-            collect_ranges(
-                &self.import_query,
-                tree,
-                source,
-                Action::Delete,
-                0,
-                &mut ranges,
-            );
+            let min = rule
+                .min_bytes
+                .map_or(0, |threshold| threshold.resolve(opts.compact));
+            for matched in root.find_all(&rule.matcher) {
+                let Some(node) = descend(matched.get_node(), rule.field.as_deref()) else {
+                    continue;
+                };
+                push_range(&node, rule, min, &mut ranges);
+            }
         }
         ranges
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn collect_ranges(
-    query: &Query,
-    tree: &tree_sitter::Tree,
-    source: &str,
-    action: Action,
-    min_bytes: usize,
-    out: &mut Vec<(usize, usize, Action)>,
-) {
-    let mut cursor = QueryCursor::new();
-    for mat in cursor.matches(query, tree.root_node(), source.as_bytes()) {
-        for cap in mat.captures {
-            let node = cap.node;
-            let start = node.start_byte();
-            let end = node.end_byte();
-            if end - start >= min_bytes {
-                out.push((start, end, action));
-            }
-        }
+fn compile_rule(lang: SupportLang, spec: RuleSpec) -> Result<CompiledRule, AppError> {
+    let core = SerializableRuleCore {
+        rule: spec.rule,
+        constraints: None,
+        utils: None,
+        transform: None,
+        fix: None,
+    };
+    let matcher = core
+        .get_matcher(DeserializeEnv::new(lang))
+        .map_err(|err| AppError::Rule(err.to_string()))?;
+    Ok(CompiledRule {
+        matcher,
+        action: spec.action.into(),
+        field: spec.field,
+        gate: spec.when,
+        min_bytes: spec.min_bytes,
+        expand_attributes: spec.expand_attributes,
+    })
+}
+
+/// Descend into `field` of `node`, or return the node itself when no field is
+/// requested. A requested-but-absent field yields `None` (skip the match).
+fn descend<'r>(node: &AstNode<'r>, field: Option<&str>) -> Option<AstNode<'r>> {
+    match field {
+        Some(name) => node.field(name),
+        None => Some(node.clone()),
     }
 }
 
-fn collect_tests(
-    query: &Query,
-    tree: &tree_sitter::Tree,
-    source: &str,
+fn push_range(
+    node: &AstNode<'_>,
+    rule: &CompiledRule,
+    min: usize,
     out: &mut Vec<(usize, usize, Action)>,
 ) {
-    let mut cursor = QueryCursor::new();
-    for mat in cursor.matches(query, tree.root_node(), source.as_bytes()) {
-        for cap in mat.captures {
-            let (start, end) = expand_attribute_to_item(cap.node);
-            if start < end {
-                out.push((start, end, Action::Delete));
-            }
+    if rule.expand_attributes {
+        let (start, end) = expand_attribute_to_item(node);
+        if start < end {
+            out.push((start, end, rule.action));
         }
+        return;
+    }
+    let range = node.range();
+    if range.end - range.start >= min {
+        out.push((range.start, range.end, rule.action));
     }
 }
 
-/// Given an `attribute_item` node, walk to its sibling item, absorbing any
-/// other `attribute_item` siblings along the way. Returns the byte range
-/// covering the whole `#[a] #[b] item` group.
-fn expand_attribute_to_item(attr: tree_sitter::Node) -> (usize, usize) {
-    let mut leftmost = attr;
-    while let Some(prev) = leftmost.prev_named_sibling() {
-        if prev.kind() != "attribute_item" {
+/// Given an attribute node, walk to its decorated item, absorbing any adjacent
+/// attribute siblings. Returns the byte range covering the whole `#[a] #[b]
+/// item` group.
+fn expand_attribute_to_item(attr: &AstNode<'_>) -> (usize, usize) {
+    let mut start = attr.range().start;
+    let mut cursor = attr.clone();
+    while let Some(prev) = named_prev(&cursor) {
+        if !is_attribute(&prev) {
             break;
         }
-        leftmost = prev;
+        start = prev.range().start;
+        cursor = prev;
     }
-    let mut rightmost = attr;
-    while let Some(next) = rightmost.next_named_sibling() {
-        rightmost = next;
-        if next.kind() != "attribute_item" {
+    let mut end = attr.range().end;
+    let mut cursor = attr.clone();
+    while let Some(next) = named_next(&cursor) {
+        end = next.range().end;
+        let absorb = is_attribute(&next);
+        cursor = next;
+        if !absorb {
             break;
         }
     }
-    (leftmost.start_byte(), rightmost.end_byte())
+    (start, end)
+}
+
+fn is_attribute(node: &AstNode<'_>) -> bool {
+    node.kind().as_ref() == "attribute_item"
+}
+
+fn named_prev<'r>(node: &AstNode<'r>) -> Option<AstNode<'r>> {
+    let mut prev = node.prev();
+    while let Some(candidate) = prev {
+        if candidate.is_named() {
+            return Some(candidate);
+        }
+        prev = candidate.prev();
+    }
+    None
+}
+
+fn named_next<'r>(node: &AstNode<'r>) -> Option<AstNode<'r>> {
+    let mut next = node.next();
+    while let Some(candidate) = next {
+        if candidate.is_named() {
+            return Some(candidate);
+        }
+        next = candidate.next();
+    }
+    None
 }
 
 /// Set of languages contasty knows how to strip.
@@ -239,19 +351,23 @@ impl Registry {
     ///
     /// # Errors
     ///
-    /// Returns [`AppError::Query`] if any embedded query fails to compile
-    /// against its grammar. This is effectively a build-time bug.
+    /// Returns [`AppError::Rule`] / [`AppError::RuleParse`] if any embedded rule
+    /// set fails to parse or compile. This is effectively a build-time bug.
     pub fn new() -> Result<Self, AppError> {
         Ok(Self {
-            langs: vec![rust::language()?],
+            langs: vec![Language::from_rules(
+                "rust",
+                rust::RULES,
+                Some(rust::format),
+            )?],
         })
     }
 
     /// Detect a language from a path's file extension.
     #[must_use]
     pub fn detect(&self, path: &Path) -> Option<&Language> {
-        let ext = path.extension()?.to_str()?;
-        self.langs.iter().find(|lg| lg.extensions.contains(&ext))
+        let lang = <SupportLang as ast_grep_core::Language>::from_path(path)?;
+        self.langs.iter().find(|registered| registered.lang == lang)
     }
 }
 

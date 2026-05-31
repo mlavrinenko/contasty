@@ -1,0 +1,59 @@
+# Rust strip rules. Each entry selects an anchor node via an ast-grep rule, then
+# acts on it (optionally descending into a named field first). See the schema and
+# docs/languages.md for the rule grammar.
+language: rust
+rules:
+  # Elide every free-function / method body. Trait method declarations are
+  # `function_signature_item` (no `body` field) and are left verbatim.
+  - action: elide
+    field: body
+    rule:
+      kind: function_item
+
+  # Elide const / static / type-alias right-hand sides over the size threshold.
+  - action: elide
+    field: value
+    min-bytes: elide-min
+    rule:
+      kind: const_item
+  - action: elide
+    field: value
+    min-bytes: elide-min
+    rule:
+      kind: static_item
+  - action: elide
+    field: type
+    min-bytes: elide-min
+    rule:
+      kind: type_item
+
+  # Truncate string and raw-string literals over the size threshold.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      any:
+        - kind: string_literal
+        - kind: raw_string_literal
+
+  # Drop every comment, doc comments included, under --include-comments off.
+  - action: delete
+    when: comments
+    rule:
+      any:
+        - kind: line_comment
+        - kind: block_comment
+
+  # Drop `use` declarations under --no-imports.
+  - action: delete
+    when: imports
+    rule:
+      kind: use_declaration
+
+  # Remove `#[test]` / `#[cfg(test)]` items. `expand-attributes` absorbs adjacent
+  # attribute siblings plus the decorated item into one delete range.
+  - action: delete
+    when: tests
+    expand-attributes: true
+    rule:
+      kind: attribute_item
+      regex: '^#\[(test|cfg\(test\))\]$'

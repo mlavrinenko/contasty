@@ -270,3 +270,77 @@ fn drop_imports_removes_use_declarations() {
         "use remained: {stripped}"
     );
 }
+
+#[test]
+fn elides_const_static_type_values_above_threshold() {
+    let reg = Registry::new().expect("registry init");
+    let lang = reg.detect(Path::new("x.rs")).expect("rust");
+    let src = "const N: u32 = 1 + 2 + 3;\n\
+               static S: u32 = 9 * 9;\n\
+               type Alias = std::collections::HashMap<String, u32>;\n";
+    // Zero threshold (the library default) elides every value expression.
+    let stripped = lang
+        .strip(
+            src,
+            Path::new("x.rs"),
+            false,
+            false,
+            false,
+            &CompactConfig::default(),
+        )
+        .expect("strip");
+    assert!(stripped.contains("const N: u32 = {}"), "const: {stripped}");
+    assert!(
+        stripped.contains("static S: u32 = {}"),
+        "static: {stripped}"
+    );
+    assert!(stripped.contains("type Alias = {}"), "type: {stripped}");
+    assert!(
+        !stripped.contains("1 + 2 + 3"),
+        "const value kept: {stripped}"
+    );
+    assert!(!stripped.contains("HashMap"), "type value kept: {stripped}");
+}
+
+#[test]
+fn keeps_values_below_elide_threshold() {
+    let reg = Registry::new().expect("registry init");
+    let lang = reg.detect(Path::new("x.rs")).expect("rust");
+    let src = "const N: u32 = 7;\n";
+    let compact = CompactConfig {
+        elide_min_bytes: 80,
+        max_string_bytes: 256,
+    };
+    let stripped = lang
+        .strip(src, Path::new("x.rs"), false, false, false, &compact)
+        .expect("strip");
+    assert!(
+        stripped.contains("const N: u32 = 7"),
+        "small const elided: {stripped}"
+    );
+}
+
+#[test]
+fn truncates_strings_above_threshold() {
+    let reg = Registry::new().expect("registry init");
+    let lang = reg.detect(Path::new("x.rs")).expect("rust");
+    // High elide threshold keeps the const value so the surviving string can be
+    // exercised by the string-truncation rule.
+    let src = "const MSG: &str = \"hello world long enough\";\n";
+    let compact = CompactConfig {
+        elide_min_bytes: 1000,
+        max_string_bytes: 8,
+    };
+    let stripped = lang
+        .strip(src, Path::new("x.rs"), false, false, false, &compact)
+        .expect("strip");
+    assert!(stripped.contains("const MSG"), "const dropped: {stripped}");
+    assert!(
+        !stripped.contains("hello world long enough"),
+        "long string kept: {stripped}"
+    );
+    assert!(
+        stripped.contains("[…CTY]"),
+        "no truncation marker: {stripped}"
+    );
+}

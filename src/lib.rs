@@ -30,13 +30,14 @@ pub enum AppError {
     #[error("walk: {0}")]
     Walk(#[from] ignore::Error),
 
-    /// Loading a tree-sitter grammar into a `Parser` failed.
-    #[error("language load: {0}")]
-    LangLoad(#[from] tree_sitter::LanguageError),
+    /// An embedded rule set could not be parsed as YAML.
+    #[error("rule parse: {0}")]
+    RuleParse(#[from] serde_yaml::Error),
 
-    /// A tree-sitter query failed to compile against its grammar.
-    #[error("query: {0}")]
-    Query(#[from] tree_sitter::QueryError),
+    /// A rule set referenced an unknown language or failed to compile against
+    /// its grammar.
+    #[error("rule: {0}")]
+    Rule(String),
 
     /// Tree-sitter produced no tree (e.g. parser was cancelled).
     #[error("parse failed: {}", path.display())]
