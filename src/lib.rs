@@ -15,7 +15,7 @@ mod render;
 pub mod stats;
 mod walk;
 
-pub use lang::Registry;
+pub use lang::{Registry, rules_schema_json};
 pub use render::{render_json, render_markdown};
 pub use walk::{Stripped, collect};
 

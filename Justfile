@@ -16,6 +16,10 @@ check:
         "chronic just machete" \
         "chronic just check-file-size"
 
+# Regenerate the rule-file JSON Schema (drift-guarded by the schema_in_sync test in `check`)
+gen-schema:
+    cargo run -q --example gen-schema
+
 # Run tests only
 test *ARGS:
     cargo test --workspace {{ ARGS }}

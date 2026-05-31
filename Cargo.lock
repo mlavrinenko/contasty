@@ -353,6 +353,7 @@ dependencies = [
  "predicates",
  "prettyplease",
  "rayon",
+ "schemars",
  "serde",
  "serde_json",
  "serde_yaml",

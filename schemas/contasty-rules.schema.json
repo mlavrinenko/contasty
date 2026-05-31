@@ -1,0 +1,430 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RuleFile",
+  "description": "A `rules/<lang>.yml` file: a target language plus its ordered strip rules.",
+  "type": "object",
+  "properties": {
+    "language": {
+      "type": "string"
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RuleSpec"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "language",
+    "rules"
+  ],
+  "$defs": {
+    "Gate": {
+      "description": "Which drop flag, if any, gates this rule.",
+      "type": "string",
+      "enum": [
+        "always",
+        "tests",
+        "comments",
+        "imports"
+      ]
+    },
+    "NthChildSimple": {
+      "description": "A string or number describing the indices of matching nodes in a list of siblings.",
+      "anyOf": [
+        {
+          "description": "A number indicating the precise element index",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        {
+          "description": "Functional notation like CSS's An + B",
+          "type": "string"
+        }
+      ]
+    },
+    "PatternStyle": {
+      "description": "A String pattern will match one single AST node according to pattern syntax.\nOr an object with field `context`, `selector` and optionally `strictness`.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "context": {
+              "description": "The surrounding code that helps to resolve any ambiguity in the syntax.",
+              "type": "string"
+            },
+            "selector": {
+              "description": "The sub-syntax node kind that is the actual matcher of the pattern.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "strictness": {
+              "description": "Strictness of the pattern. More strict pattern matches fewer nodes.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Strictness"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "context"
+          ]
+        }
+      ]
+    },
+    "Relation": {
+      "description": "A relational rule object, which is a Rule object with two additional fields stopBy and field.",
+      "type": "object",
+      "properties": {
+        "all": {
+          "description": "A list of sub rules and matches a node if all of sub rules match.\nThe meta variables of the matched node contain all variables from the sub-rules.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SerializableRule"
+          }
+        },
+        "any": {
+          "description": "A list of sub rules and matches a node if any of sub rules match.\nThe meta variables of the matched node only contain those of the matched sub-rule.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SerializableRule"
+          }
+        },
+        "field": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "follows": {
+          "description": "`follows` accepts a relational rule object.\nthe target node must appear after another node matching the `follows` sub-rule.",
+          "$ref": "#/$defs/Relation"
+        },
+        "has": {
+          "description": "`has` accepts a relational rule object.\nthe target node must has a descendant node matching the `has` sub-rule.",
+          "$ref": "#/$defs/Relation"
+        },
+        "inside": {
+          "description": "`inside` accepts a relational rule object.\nthe target node must appear inside of another node matching the `inside` sub-rule.",
+          "$ref": "#/$defs/Relation"
+        },
+        "kind": {
+          "description": "The kind name of the node to match. You can look up code's kind names in playground.",
+          "type": "string"
+        },
+        "matches": {
+          "description": "A utility rule id or parameterized utility call object.\nWhen multiple utility calls are present, they are combined with logical `all`.",
+          "$ref": "#/$defs/SerializableMatches"
+        },
+        "not": {
+          "description": "A single sub-rule and matches a node if the sub rule does not match.",
+          "$ref": "#/$defs/SerializableRule"
+        },
+        "nthChild": {
+          "description": "`nth_child` accepts number, string or object.\nIt specifies the position in nodes' sibling list.",
+          "$ref": "#/$defs/SerializableNthChild"
+        },
+        "pattern": {
+          "description": "A pattern string or a pattern object.",
+          "$ref": "#/$defs/PatternStyle"
+        },
+        "precedes": {
+          "description": "`precedes` accepts a relational rule object.\nthe target node must appear before another node matching the `precedes` sub-rule.",
+          "$ref": "#/$defs/Relation"
+        },
+        "range": {
+          "description": "`range` accepts a range object.\nthe target node must exactly appear in the range.",
+          "$ref": "#/$defs/SerializableRange"
+        },
+        "regex": {
+          "description": "A Rust regular expression to match the node's text. https://docs.rs/regex/latest/regex/#syntax",
+          "type": "string"
+        },
+        "stopBy": {
+          "$ref": "#/$defs/SerializableStopBy",
+          "default": "neighbor"
+        }
+      }
+    },
+    "RuleAction": {
+      "description": "What to do with each matched range.",
+      "type": "string",
+      "enum": [
+        "elide",
+        "delete",
+        "truncate"
+      ]
+    },
+    "RuleSpec": {
+      "description": "One strip rule: an ast-grep matcher plus what to do with each hit.",
+      "type": "object",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/RuleAction"
+        },
+        "expand-attributes": {
+          "type": "boolean",
+          "default": false
+        },
+        "field": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "min-bytes": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Threshold"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rule": {
+          "$ref": "#/$defs/SerializableRule"
+        },
+        "when": {
+          "$ref": "#/$defs/Gate"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "rule"
+      ]
+    },
+    "SerializableMatches": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/SerializableRule"
+            }
+          }
+        }
+      ]
+    },
+    "SerializableNthChild": {
+      "description": "`nthChild` accepts either a number, a string or an object.",
+      "anyOf": [
+        {
+          "description": "Simple syntax",
+          "$ref": "#/$defs/NthChildSimple"
+        },
+        {
+          "description": "Object style syntax",
+          "type": "object",
+          "properties": {
+            "ofRule": {
+              "description": "select the nth node that matches the rule, like CSS's of syntax",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SerializableRule"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "position": {
+              "description": "nth-child syntax",
+              "$ref": "#/$defs/NthChildSimple"
+            },
+            "reverse": {
+              "description": "matches from the end instead like CSS's nth-last-child",
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "required": [
+            "position"
+          ]
+        }
+      ]
+    },
+    "SerializablePosition": {
+      "description": "Represents a zero-based character-wise position in a document",
+      "type": "object",
+      "properties": {
+        "column": {
+          "description": "0-based column number in the source code",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "line": {
+          "description": "0-based line number in the source code",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "line"
+      ]
+    },
+    "SerializableRange": {
+      "description": "Represents a position in source code using 0-based line and column numbers",
+      "type": "object",
+      "properties": {
+        "end": {
+          "description": "end position in the source code",
+          "$ref": "#/$defs/SerializablePosition"
+        },
+        "start": {
+          "description": "start position in the source code",
+          "$ref": "#/$defs/SerializablePosition"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ]
+    },
+    "SerializableRule": {
+      "description": "A rule object to find matching AST nodes. We have three categories of rules in ast-grep.\n\n* Atomic: the most basic rule to match AST. We have two variants: Pattern and Kind.\n\n* Relational: filter matched target according to their position relative to other nodes.\n\n* Composite: use logic operation all/any/not to compose the above rules to larger rules.\n\nEvery rule has it's unique name so we can combine several rules in one object.",
+      "type": "object",
+      "properties": {
+        "all": {
+          "description": "A list of sub rules and matches a node if all of sub rules match.\nThe meta variables of the matched node contain all variables from the sub-rules.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SerializableRule"
+          }
+        },
+        "any": {
+          "description": "A list of sub rules and matches a node if any of sub rules match.\nThe meta variables of the matched node only contain those of the matched sub-rule.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SerializableRule"
+          }
+        },
+        "follows": {
+          "description": "`follows` accepts a relational rule object.\nthe target node must appear after another node matching the `follows` sub-rule.",
+          "$ref": "#/$defs/Relation"
+        },
+        "has": {
+          "description": "`has` accepts a relational rule object.\nthe target node must has a descendant node matching the `has` sub-rule.",
+          "$ref": "#/$defs/Relation"
+        },
+        "inside": {
+          "description": "`inside` accepts a relational rule object.\nthe target node must appear inside of another node matching the `inside` sub-rule.",
+          "$ref": "#/$defs/Relation"
+        },
+        "kind": {
+          "description": "The kind name of the node to match. You can look up code's kind names in playground.",
+          "type": "string"
+        },
+        "matches": {
+          "description": "A utility rule id or parameterized utility call object.\nWhen multiple utility calls are present, they are combined with logical `all`.",
+          "$ref": "#/$defs/SerializableMatches"
+        },
+        "not": {
+          "description": "A single sub-rule and matches a node if the sub rule does not match.",
+          "$ref": "#/$defs/SerializableRule"
+        },
+        "nthChild": {
+          "description": "`nth_child` accepts number, string or object.\nIt specifies the position in nodes' sibling list.",
+          "$ref": "#/$defs/SerializableNthChild"
+        },
+        "pattern": {
+          "description": "A pattern string or a pattern object.",
+          "$ref": "#/$defs/PatternStyle"
+        },
+        "precedes": {
+          "description": "`precedes` accepts a relational rule object.\nthe target node must appear before another node matching the `precedes` sub-rule.",
+          "$ref": "#/$defs/Relation"
+        },
+        "range": {
+          "description": "`range` accepts a range object.\nthe target node must exactly appear in the range.",
+          "$ref": "#/$defs/SerializableRange"
+        },
+        "regex": {
+          "description": "A Rust regular expression to match the node's text. https://docs.rs/regex/latest/regex/#syntax",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SerializableStopBy": {
+      "description": "Control how the relational rule search should stop",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "neighbor",
+            "end"
+          ]
+        },
+        {
+          "$ref": "#/$defs/SerializableRule"
+        }
+      ]
+    },
+    "Strictness": {
+      "oneOf": [
+        {
+          "description": "all nodes are matched",
+          "type": "string",
+          "const": "cst"
+        },
+        {
+          "description": "all nodes except source trivial nodes are matched.",
+          "type": "string",
+          "const": "smart"
+        },
+        {
+          "description": "only ast nodes are matched",
+          "type": "string",
+          "const": "ast"
+        },
+        {
+          "description": "ast-nodes excluding comments are matched",
+          "type": "string",
+          "const": "relaxed"
+        },
+        {
+          "description": "ast-nodes excluding comments, without text",
+          "type": "string",
+          "const": "signature"
+        },
+        {
+          "description": "similar to smart, but node kinds are ignored, only text is matched.",
+          "type": "string",
+          "const": "template"
+        }
+      ]
+    },
+    "Threshold": {
+      "description": "Which configured byte threshold a match must clear to count.",
+      "type": "string",
+      "enum": [
+        "elide-min",
+        "max-string"
+      ]
+    }
+  }
+}

@@ -17,6 +17,7 @@ use ast_grep_config::{DeserializeEnv, RuleCore, SerializableRule, SerializableRu
 use ast_grep_core::AstGrep;
 use ast_grep_core::tree_sitter::StrDoc;
 use ast_grep_language::SupportLang;
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 use crate::AppError;
@@ -75,15 +76,17 @@ enum Action {
 
 // --- Rule file schema (deserialized from `rules/<lang>.yml`) ---------------
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+/// A `rules/<lang>.yml` file: a target language plus its ordered strip rules.
 struct RuleFile {
     language: String,
     rules: Vec<RuleSpec>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
+/// One strip rule: an ast-grep matcher plus what to do with each hit.
 struct RuleSpec {
     action: RuleAction,
     rule: SerializableRule,
@@ -97,8 +100,9 @@ struct RuleSpec {
     expand_attributes: bool,
 }
 
-#[derive(Deserialize, Clone, Copy)]
+#[derive(Deserialize, Clone, Copy, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
+/// What to do with each matched range.
 enum RuleAction {
     Elide,
     Delete,
@@ -115,8 +119,9 @@ impl From<RuleAction> for Action {
     }
 }
 
-#[derive(Deserialize, Clone, Copy, Default)]
+#[derive(Deserialize, Clone, Copy, Default, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
+/// Which drop flag, if any, gates this rule.
 enum Gate {
     #[default]
     Always,
@@ -136,8 +141,9 @@ impl Gate {
     }
 }
 
-#[derive(Deserialize, Clone, Copy)]
+#[derive(Deserialize, Clone, Copy, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
+/// Which configured byte threshold a match must clear to count.
 enum Threshold {
     ElideMin,
     MaxString,
@@ -150,6 +156,18 @@ impl Threshold {
             Self::MaxString => compact.max_string_bytes,
         }
     }
+}
+
+/// JSON Schema (Draft 2020-12) for the `rules/<lang>.yml` format, pretty-printed
+/// with a trailing newline. The rule subtree is composed from `ast-grep-config`'s
+/// own `SerializableRule` schema. Backs `schemas/contasty-rules.schema.json`;
+/// regenerate with `just gen-schema`, drift-guarded by the `schema_in_sync` test.
+#[must_use]
+pub fn rules_schema_json() -> String {
+    let schema = schemars::schema_for!(RuleFile);
+    let mut json = serde_json::to_string_pretty(&schema).unwrap_or_default();
+    json.push('\n');
+    json
 }
 
 impl Language {

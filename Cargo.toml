@@ -29,6 +29,7 @@ env_logger = "0.11"
 ast-grep-core = "0.43"
 ast-grep-config = "0.43"
 ast-grep-language = "0.43"
+schemars = "1"
 syn = { version = "2", features = ["full", "parsing"] }
 prettyplease = "0.2"
 ignore = "0.4"

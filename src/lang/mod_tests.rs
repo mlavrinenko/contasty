@@ -40,6 +40,23 @@ fn splice_delete_action_removes_range_and_trailing_newline() {
 }
 
 #[test]
+fn rejects_unknown_rule_key() {
+    let yaml = "language: rust\n\
+                rules:\n  \
+                  - action: elide\n    \
+                    bogus: true\n    \
+                    rule:\n      \
+                      kind: function_item\n";
+    let Err(err) = serde_yaml::from_str::<RuleFile>(yaml) else {
+        panic!("unknown key must be rejected");
+    };
+    assert!(
+        err.to_string().contains("bogus"),
+        "error should name the offending key: {err}"
+    );
+}
+
+#[test]
 fn detect_matches_known_extension() {
     let reg = Registry::new().expect("registry init");
     assert!(reg.detect(Path::new("foo.rs")).is_some());
