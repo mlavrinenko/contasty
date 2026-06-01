@@ -50,9 +50,11 @@ Every commit footer carries a `Refs:` pointing at the task file it advances:
 Refs: tasks/01-engine-swap.md
 ```
 
-The `tasks/` directory was removed from the working tree at the `0.1.0` release;
-its files survive in git history. A `Refs:` path therefore resolves against
-history, not the working tree — read a referenced task with
-`git show <commit>:tasks/01-engine-swap.md` or `git log -- tasks/01-engine-swap.md`.
+Active tasks live in `tasks/`, tracked by the checklist in `tasks/index.md`.
+`tasks/index.md` is permanent; individual `tasks/NN-slug.md` files are cleaned
+up from time to time once their work has shipped. A `Refs:` may therefore point
+at a file no longer in the working tree — it resolves against git history, read
+it with `git show <commit>:tasks/NN-slug.md` or `git log -- tasks/NN-slug.md`
+(e.g. the foundational `01`–`05` tasks removed at the `0.1.0` release).
 A commit that does not advance a planned task (release prep, maintenance, docs)
 uses `Refs: CHANGELOG.md`.
