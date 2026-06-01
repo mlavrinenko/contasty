@@ -9,9 +9,9 @@ rust-version = "1.85"
 description = "Strips all executable lines from your code to prepare tasty context for your agent."
 license = "MIT"
 repository = "https://github.com/mlavrinenko/contasty"
-keywords = []
+keywords = ["llm", "context", "ast-grep", "tree-sitter", "agent"]
 categories = ["command-line-utilities"]
-include = ["/src/", "/LICENSE*", "/README.md"]
+include = ["/src/", "/LICENSE*", "/README.md", "/CHANGELOG.md"]
 
 [lib]
 name = "contasty"
