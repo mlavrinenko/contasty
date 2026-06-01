@@ -7,19 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-01
+
+First public release.
+
 ### Added
 
-- `contasty <PATH>` CLI: gitignore-aware walker, tree-sitter parsing, Markdown
-  rendering. Strips Rust `fn` bodies, keeps signatures and types.
-- `Language` registry: adding a language is grammar dependency + sibling module
-  + one tree-sitter query.
-- Tests are dropped from the output by default — `#[test]` functions and
-  `#[cfg(test)]` modules are removed entirely, including any adjacent
-  attributes like `#[allow(...)]`. Pass `--include-tests` to keep them.
-- Comments are dropped from the output by default — every `//`, `///`, `//!`,
-  `/* */`, `/** */`, `/*! */` is removed. Pass `--include-comments` to keep
-  them (all-or-nothing — doc and non-doc share the same flag).
+- `contasty <PATH>` CLI: a `.gitignore`-aware directory walker that parses each
+  supported source file and renders a single context bundle. Defaults to the
+  current directory; accepts a single file or a directory. Files are parsed and
+  stripped in parallel with rayon.
+- ast-grep matching engine: each language is driven by a YAML rule file
+  (`src/lang/rules/<lang>.yml`, embedded at build time) whose rules select AST
+  nodes and map to `elide` / `delete` / `truncate` actions over a byte-range
+  splicer. Adding a built-in is a rule file plus a `Registry::new` entry — no
+  per-language matching logic in Rust. The full ast-grep rule grammar
+  (`kind`, `pattern`, `regex`, `inside`, `has`, `all`/`any`/`not`, ...) is
+  available.
+- Rust stripping: elide `fn` bodies, `const` / `static` value expressions, and
+  `type` alias right-hand sides; output is reformatted via prettyplease.
+- PHP support as a rules-only language: elide function/method/closure bodies,
+  truncate long string literals, drop comments / imports / PHPUnit `*Test`
+  classes per flag, keep namespaces.
+- String truncation: literals longer than `max_string_bytes` (default 256) are
+  replaced with a truncation marker. Blank-line runs are collapsed.
+- `min-bytes` thresholds: `elide-min` (`elide_min_bytes`, default 80) keeps
+  small const/static/type values intact; `max-string` gates truncation. Both
+  are configurable from `contasty.toml`.
+- Test elision: `#[test]` functions and `#[cfg(test)]` modules (with adjacent
+  attributes) are dropped by default. `--include-tests` keeps them.
+- Comment elision: every comment is dropped by default. `--include-comments`
+  keeps them (doc and non-doc share the flag).
+- `--no-imports`: drop every `use` declaration (kept by default).
+- `--format=json`: emit a pretty-printed JSON bundle
+  (`{ base, files: [{ path, lang, content }] }`) instead of Markdown.
+- `--stats`: print original vs compacted line counts (code, comments, blanks)
+  via tokei instead of the stripped output.
+- `--config <path>`: select a `contasty.toml`; otherwise the one in the current
+  directory is used.
+- Dynamic `.so` grammars: register a native tree-sitter grammar ast-grep does
+  not bundle under `[customLanguages]` in `contasty.toml`, bound to a rule file
+  — no rebuild. Missing or incompatible libraries fail with an actionable error.
+- User-extensible rules: `[rules.<lang>]` points a built-in or dynamic language
+  at a user rule file that either `extend`s (appends to) or `override`s
+  (replaces) its embedded rule set, with no rebuild.
+- JSON Schema (Draft 2020-12) for rule files at
+  `schemas/contasty-rules.schema.json`, derived from the Rust config types and
+  composing ast-grep's `SerializableRule` schema. Generated via
+  `just gen-schema` and drift-guarded by a test. Shipped rule files carry a
+  `yaml-language-server` modeline; editor wiring is documented for Zed.
+- Markdown renderer with relative paths in per-file headers.
 
-### Removed
-
-- `greet` placeholder library function and `log` dependency.
+[Unreleased]: https://github.com/mlavrinenko/contasty/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/mlavrinenko/contasty/releases/tag/v0.1.0
