@@ -90,19 +90,35 @@ fn missing_formatter_falls_back_to_raw_splice() {
 }
 
 #[test]
-fn no_reformat_disables_builtin_rust_formatter() {
-    let src = "pub   fn   add(lhs:i32,rhs:i32)->i32{lhs+rhs}\n";
+fn no_reformat_skips_reformatter_resolution() {
+    // An empty command is rejected when reformatting is active...
+    let active = config_with("php", Some(cmd(&[])), false);
+    assert!(matches!(
+        expect_config_error(&active),
+        contasty::AppError::Config(_)
+    ));
+    // ...but --no-reformat forces every language to `none`, so resolution is
+    // skipped and the otherwise-invalid entry is accepted.
+    let disabled = config_with("php", Some(cmd(&[])), true);
+    Registry::with_config(&disabled).expect("--no-reformat must skip reformat resolution");
+}
 
-    let formatted = strip(&config_with("rust", None, false), "rs", src).expect("default");
-    assert!(
-        formatted.contains("pub fn add(lhs: i32, rhs: i32) -> i32 {}"),
-        "prettyplease did not normalize: {formatted}"
-    );
-
-    let raw = strip(&config_with("rust", None, true), "rs", src).expect("no-reformat");
-    assert!(
-        raw.contains("pub   fn   add"),
-        "--no-reformat should keep the raw splice: {raw}"
+#[test]
+fn no_reformat_keeps_raw_splice() {
+    if !tool_present("pretty-php") {
+        eprintln!("skipping: pretty-php not installed");
+        return;
+    }
+    let raw = strip(&config_with("php", None, false), "php", PHP_SRC).expect("raw");
+    let off = strip(
+        &config_with("php", Some(cmd(&["pretty-php", "-"])), true),
+        "php",
+        PHP_SRC,
+    )
+    .expect("no-reformat");
+    assert_eq!(
+        off, raw,
+        "--no-reformat must bypass the configured formatter"
     );
 }
 

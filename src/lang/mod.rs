@@ -27,7 +27,6 @@ use crate::lang::reformat::Reformatter;
 mod dynamic;
 mod overrides;
 mod reformat;
-mod rust;
 mod shellout;
 #[cfg(feature = "topiary")]
 mod topiary;
@@ -41,10 +40,10 @@ pub struct Language {
     pub name: &'static str,
     lang: Lang,
     rules: Vec<CompiledRule>,
-    /// Post-strip reformatter applied after splicing. Defaults to a built-in
-    /// (Rust prettyplease) or `None`; the `reformat` config key overrides it
-    /// with Topiary or a shell-out command. A failure falls back to the
-    /// unformatted splice rather than failing the whole file.
+    /// Post-strip reformatter applied after splicing. `None` by default; the
+    /// `reformat` config key opts a language into Topiary or a shell-out
+    /// command. A failure falls back to the unformatted splice rather than
+    /// failing the whole file.
     reformat: Reformatter,
 }
 
@@ -229,7 +228,7 @@ impl Language {
         };
         let ranges = self.collect(&grep, &opts);
         let spliced = splice(source, &ranges);
-        Ok(self.reformat.apply(&spliced, drop_comments))
+        Ok(self.reformat.apply(&spliced))
     }
 
     fn collect(&self, grep: &AstGrep<Doc>, opts: &StripOptions) -> Vec<(usize, usize, Action)> {
@@ -369,7 +368,7 @@ impl Registry {
     pub fn new() -> Result<Self, AppError> {
         Ok(Self {
             langs: vec![
-                Language::from_rules("rust", rust::RULES, Reformatter::Builtin(rust::format))?,
+                Language::from_rules("rust", include_str!("rules/rust.yml"), Reformatter::None)?,
                 Language::from_rules("php", include_str!("rules/php.yml"), Reformatter::None)?,
             ],
         })

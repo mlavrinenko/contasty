@@ -79,8 +79,8 @@ pub struct LangConfig {
     /// Replace the language's rules with this file outright (override mode).
     #[serde(default, rename = "override")]
     pub r#override: Option<PathBuf>,
-    /// Post-strip reformatter backend. Absent keeps the raw byte-splice (or the
-    /// language's built-in formatter, e.g. Rust's prettyplease). See [`Reformat`].
+    /// Post-strip reformatter backend. Absent keeps the raw byte-splice. See
+    /// [`Reformat`].
     #[serde(default)]
     pub reformat: Option<Reformat>,
 }
@@ -88,8 +88,7 @@ pub struct LangConfig {
 /// Post-strip reformatter selection for a language (the `reformat` key of a
 /// `[languages.<lang>]` entry).
 ///
-/// - absent / `reformat = "none"` — keep the raw splice (or the language's
-///   built-in formatter, e.g. Rust's prettyplease).
+/// - absent / `reformat = "none"` — keep the raw splice unchanged.
 /// - `reformat = "topiary"` — embedded Topiary backend (needs the `topiary`
 ///   build feature and a Topiary query for the language).
 /// - `reformat = { command = ["prettier", "--parser", "php"] }` — shell out to
@@ -110,8 +109,7 @@ pub enum Reformat {
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ReformatMode {
-    /// Keep the unformatted splice (or a built-in formatter); disables an
-    /// inherited backend.
+    /// Keep the unformatted splice; explicit no-op backend.
     None,
     /// Embedded Topiary backend.
     Topiary,

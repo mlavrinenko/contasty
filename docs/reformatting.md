@@ -3,8 +3,9 @@
 Stripping splices kept declarations around elided bodies by raw byte ranges, so
 the kept lines keep their original indentation while their spliced neighbours
 shift — output is correct but can look ragged. A post-strip reformatter cleans
-that up. Rust is reflowed through prettyplease out of the box; every other
-language keeps the raw splice unless you opt into a reformatter.
+that up. No language is reformatted by default — the engine ships no
+per-language formatting dependency — so every language keeps the raw splice
+until you opt into a reformatter.
 
 Reformatting is purely cosmetic. It runs after splice, before render, and a
 failure is never fatal: contasty logs a `warn` and falls back to the
@@ -17,10 +18,6 @@ Set `reformat` under a language's `[languages.<lang>]` entry. Three forms:
 
 ```toml
 [languages.rust]
-# Disable the built-in prettyplease pass for Rust.
-reformat = "none"
-
-[languages.php]
 # Embedded Topiary backend (needs the `topiary` build feature + a query).
 reformat = "topiary"
 
@@ -30,18 +27,15 @@ reformat = "topiary"
 reformat = { command = ["prettier", "--parser", "typescript"] }
 ```
 
-- absent — keep the language's default (Rust: prettyplease; everything else:
-  raw splice).
-- `"none"` — force the raw splice, even for a language with a built-in pass.
+- absent / `"none"` — keep the raw splice (no reformatting).
 - `"topiary"` — embedded Topiary backend (see below).
 - `{ command = [...] }` — shell-out backend (see below).
 
 Both Markdown and JSON output render from the same stripped string, so a
 language is reformatted once, upstream of either renderer.
 
-The `--no-reformat` CLI flag disables every reformatter for the run — built-in,
-Topiary, and shell-out alike — without editing config. Use it to skip a slow or
-untrusted formatter.
+The `--no-reformat` CLI flag disables every reformatter for the run without
+editing config. Use it to skip a slow or untrusted formatter.
 
 ## Embedded mode (Topiary)
 
@@ -59,11 +53,8 @@ where Topiary has no query/grammar for a language (PHP, today), `reformat =
 "topiary"` is a hard config error, not a silent no-op. Build with the feature
 off and the same key reports that the feature is missing — again, never silent.
 
-Today the only registered language with a Topiary query is Rust (which can swap
-its prettyplease default for Topiary). The supported set grows as more bundled
-grammars gain queries. Rust keeps prettyplease as its always-on default
-regardless: Topiary is opt-in and heavy, so the default binary must not depend
-on it for the one language that already formats cleanly.
+Today the only registered language with a Topiary query is Rust. The supported
+set grows as more bundled grammars gain queries.
 
 ### Maintenance
 

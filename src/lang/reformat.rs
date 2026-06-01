@@ -2,11 +2,12 @@
 //! `Option<fn(&str) -> Option<String>>` formatter slot.
 //!
 //! After splicing, each language runs its [`Reformatter`] over the stripped
-//! text. Rust keeps its built-in prettyplease pass; every other language is
-//! `None` by default and opts in via the `reformat` key of its
-//! `[languages.<lang>]` config entry — either the embedded Topiary backend
-//! (feature `topiary`) or a shell-out command. A reformat failure is never
-//! fatal: it warns and falls back to the unformatted splice.
+//! text. There is no built-in, always-on formatter for any language: the engine
+//! ships no per-language formatting dependency. Every language is `None` by
+//! default and opts in via the `reformat` key of its `[languages.<lang>]`
+//! config entry — either the embedded Topiary backend (feature `topiary`) or a
+//! shell-out command. A reformat failure is never fatal: it warns and falls
+//! back to the unformatted splice.
 
 use std::collections::HashMap;
 
@@ -20,11 +21,6 @@ use super::shellout;
 pub(super) enum Reformatter {
     /// Keep the raw splice verbatim.
     None,
-    /// A compiled-in formatter (e.g. Rust's prettyplease). Only runs when
-    /// comments are dropped: `syn`-based formatters discard non-doc comments, so
-    /// formatting under `--include-comments` would lose them. Returns `None`
-    /// when it cannot parse the post-strip source.
-    Builtin(fn(&str) -> Option<String>),
     /// Shell out to an external formatter (argv vector, stdin -> stdout).
     Command(Vec<String>),
     /// Embedded Topiary backend keyed by the language's name.
@@ -33,12 +29,10 @@ pub(super) enum Reformatter {
 }
 
 impl Reformatter {
-    /// Reformat `source`, falling back to it unchanged on any failure. The
-    /// `drop_comments` flag gates only the comment-lossy [`Self::Builtin`] pass.
-    pub(super) fn apply(&self, source: &str, drop_comments: bool) -> String {
+    /// Reformat `source`, falling back to it unchanged on any failure.
+    pub(super) fn apply(&self, source: &str) -> String {
         match self {
             Self::None => source.to_owned(),
-            Self::Builtin(formatter) => run_builtin(*formatter, source, drop_comments),
             Self::Command(argv) => shellout::run(argv, source).unwrap_or_else(|| source.to_owned()),
             #[cfg(feature = "topiary")]
             Self::Topiary(name) => {
@@ -48,17 +42,9 @@ impl Reformatter {
     }
 }
 
-fn run_builtin(formatter: fn(&str) -> Option<String>, source: &str, drop_comments: bool) -> String {
-    if !drop_comments {
-        return source.to_owned();
-    }
-    formatter(source).unwrap_or_else(|| source.to_owned())
-}
-
 impl Registry {
     /// Apply the `reformat` key of every `[languages.<lang>]` entry that sets
-    /// one, replacing the language's default reformatter. Entries without
-    /// `reformat` keep their built-in default (Rust: prettyplease; others: none).
+    /// one. Entries without `reformat` keep the default of no reformatting.
     ///
     /// # Errors
     ///
@@ -89,7 +75,7 @@ impl Registry {
     }
 
     /// Force every registered language to skip reformatting (the `--no-reformat`
-    /// kill-switch), including the built-in Rust prettyplease pass.
+    /// kill-switch).
     pub(super) fn disable_reformat(&mut self) {
         for lang in &mut self.langs {
             lang.reformat = Reformatter::None;

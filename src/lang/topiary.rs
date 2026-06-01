@@ -8,9 +8,8 @@
 //! and yields `None` so the caller keeps the unformatted splice.
 //!
 //! The set of supported languages is intentionally small: it overlaps the
-//! languages contasty registers (today only Rust, which can opt out of its
-//! prettyplease default in favour of Topiary). Add a `query_for` + `grammar_for`
-//! arm as more bundled grammars gain Topiary queries.
+//! languages contasty registers (today only Rust). Add a `query_for` +
+//! `grammar_for` arm as more bundled grammars gain Topiary queries.
 
 use topiary_core::{Language, Operation, TopiaryQuery, formatter_str};
 use topiary_tree_sitter_facade::Language as TsLanguage;

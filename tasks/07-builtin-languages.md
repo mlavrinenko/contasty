@@ -3,13 +3,22 @@
 ## Context
 
 contasty's engine is rules-only: a language is a YAML rule file plus one
-`Registry::new` line (`Language::from_rules("php", include_str!(...), None)`).
+`Registry::new` line
+(`Language::from_rules("php", include_str!("rules/php.yml"), Reformatter::None)`).
 Built-ins today are just Rust and PHP, but ast-grep 0.43 bundles 28 grammars
 out of the box (no `.so` needed). Every one is reachable as a built-in with
 zero new Rust matching logic — only rule data. For a tool pitched as "tasty
 context for your agent," shipping the languages agents actually live in
 (TypeScript/TSX, Python, Go, JavaScript, ...) is the single biggest adoption
 lever.
+
+No language ships a built-in, always-on formatter (task 06 removed Rust's
+prettyplease): the engine carries no per-language formatting dependency. A new
+built-in registers with `Reformatter::None`. Output is the raw byte-splice;
+tidy it only via task 06's opt-in backends (embedded Topiary where a query
+exists, else a shell-out command in `contasty.toml`). Adding a Rust formatter
+crate per language is explicitly out of scope — it would bloat the default
+binary, the exact cost the reformatter design avoids.
 
 ## Goal
 
@@ -78,8 +87,10 @@ For every added language:
 
 - Share rules across close cousins (TypeScript / Tsx / JavaScript) via the
   `extend` mechanism, or keep one self-contained file each?
-- Does any bundled grammar need a formatter (task 06) to produce clean output,
-  creating a dependency between the two tasks?
+- A bundled grammar with ragged raw-splice output never blocks this task:
+  reformatting is opt-in via task 06 (Topiary query if one exists, else a
+  shell-out command), never a bundled per-language formatter. Note in
+  `docs/reformatting.md` which new languages have a Topiary query available.
 
 ## Done when
 
