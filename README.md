@@ -17,9 +17,10 @@ and types intact. The result prints as a single Markdown document, ready to
 paste into an LLM context window.
 
 Each language is driven by a YAML rule file matched against the AST, not by
-hardcoded per-language logic. Built-in support: Rust and PHP. You can add a
-language with a dynamic tree-sitter grammar, and extend or override any
-language's rules from `contasty.toml` — both without rebuilding contasty.
+hardcoded per-language logic. Built-in support: Rust, PHP, TypeScript, TSX,
+JavaScript, Python, and Go. You can add a language with a dynamic tree-sitter
+grammar, and extend or override any language's rules from `contasty.toml` — both
+without rebuilding contasty.
 
 ## Install
 
@@ -69,7 +70,7 @@ last mention of a category wins. `all` (alias `everything`) applies to all
 three at once.
 
 Category gating applies to every supported language — test and import rules in
-`rust.yml` and `php.yml` (and any custom rule file) declare which category gates
+each built-in rule file (and any custom rule file) declare which category gates
 them, so the same flags work uniformly.
 
 ## Configuration

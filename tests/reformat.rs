@@ -59,7 +59,7 @@ const PHP_SRC: &str = include_str!("fixtures/php/sample.php");
 
 #[test]
 fn unknown_language_reformat_is_config_error() {
-    let config = config_with("javascript", Some(cmd(&["cat"])), false);
+    let config = config_with("nonexistent-lang", Some(cmd(&["cat"])), false);
     let err = expect_config_error(&config);
     assert!(
         matches!(err, contasty::AppError::Config(_)),

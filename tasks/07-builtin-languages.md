@@ -79,7 +79,16 @@ For every added language:
 
 ## Checklist
 
-- [ ] Tier 1: TypeScript / Tsx / JavaScript / Python / Go
+- [x] Tier 1: TypeScript / Tsx / JavaScript / Python / Go
+  - Rule files `src/lang/rules/{typescript,tsx,javascript,python,go}.yml`,
+    registered in `Registry::new`.
+  - Fixture pairs + golden tests `tests/{typescript,tsx,javascript,python,go}.rs`
+    with `tests/fixtures/<lang>/sample.<ext>` + `sample.stripped.<ext>`. Stripped
+    snapshots parse-checked (py via `ast`, go via `gofmt -e`, js via
+    `node --check`).
+  - Go skips value-init elision: the generic `{}` marker is a valid empty block
+    (bodies) but not a valid Go expression (initializers). Documented in
+    `docs/languages.md`.
 - [ ] Tier 2: Java / CSharp / Ruby / Cpp / C / Kotlin / Swift / Scala
 - [ ] Tier 3: remaining + data/markup languages (or documented skips)
 
@@ -87,10 +96,18 @@ For every added language:
 
 - Share rules across close cousins (TypeScript / Tsx / JavaScript) via the
   `extend` mechanism, or keep one self-contained file each?
+  - Resolved: one self-contained file each. `extend` is a config-time mechanism
+    for user rule files, not wired between built-ins in `Registry::new`. The
+    three grammars share every node kind the rules touch, so the files are
+    deliberate near-duplicates; keeping them separate lets a per-cousin grammar
+    quirk be fixed in isolation. Documented in `docs/languages.md`.
 - A bundled grammar with ragged raw-splice output never blocks this task:
   reformatting is opt-in via task 06 (Topiary query if one exists, else a
   shell-out command), never a bundled per-language formatter. Note in
   `docs/reformatting.md` which new languages have a Topiary query available.
+  - Resolved: none of the Tier 1 languages ship an embedded Topiary query yet
+    (only Rust does), so they tidy via shell-out (`gofmt`, `black`, `prettier`).
+    Noted in `docs/reformatting.md`.
 
 ## Done when
 

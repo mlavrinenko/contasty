@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# TSX strip rules. Identical in shape to `typescript.yml`: the tree-sitter-tsx
+# grammar (ast-grep's SupportLang::Tsx) shares every node kind these rules touch
+# and only adds JSX. An arrow whose body is a `jsx_element` elides to `() => {}`,
+# valid TSX. Kept a self-contained file rather than shared via `extend` (see
+# docs/languages.md, "sharing rules across cousins").
+language: tsx
+rules:
+  # Elide every function / method / closure body. JSX-returning arrows are handled
+  # the same way; overload/ambient signatures have no `body` and stay verbatim.
+  - action: elide
+    field: body
+    rule:
+      any:
+        - kind: function_declaration
+        - kind: function_expression
+        - kind: arrow_function
+        - kind: method_definition
+        - kind: generator_function_declaration
+        - kind: generator_function
+
+  # Elide large object / array initializers, guarded to data literals.
+  - action: elide
+    field: value
+    min-bytes: elide-min
+    rule:
+      kind: variable_declarator
+      has:
+        field: value
+        any:
+          - kind: object
+          - kind: array
+
+  # Truncate long string and template-string literals over the size threshold.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      any:
+        - kind: string
+        - kind: template_string
+
+  # Drop every comment when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment
+
+  # Drop `import` statements when imports are excluded; keep `export`.
+  - action: delete
+    when: imports
+    rule:
+      kind: import_statement
+
+  # Drop `describe` / `it` / `test` / `suite` blocks when tests are excluded.
+  - action: delete
+    when: tests
+    rule:
+      kind: expression_statement
+      has:
+        kind: call_expression
+        has:
+          field: function
+          regex: '^(describe|it|test|suite)$'

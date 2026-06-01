@@ -26,6 +26,12 @@ First public release (not yet tagged).
   `type` alias right-hand sides.
 - PHP support as a rules-only language: elide function/method/closure bodies,
   truncate long string literals, keep namespaces.
+- Tier 1 built-in languages (TypeScript, TSX, JavaScript, Python, Go): each an
+  embedded rule file plus a `Registry::new` entry, riding ast-grep's bundled
+  grammars — no `.so`, no config. Elide function/method/closure bodies, drop
+  imports / comments / tests by category, truncate long strings, and elide large
+  object/array/dict initializers (Go keeps initializers — the `{}` marker is no
+  valid Go expression). TS/TSX/JS ship self-contained near-duplicate rule files.
 - Category model with ordered, repeatable flags: `--include=<SEL>` /
   `--exclude=<SEL>` over `comments`, `imports`, `tests`, and `all` (alias
   `everything`). Both flags are processed left to right and the last mention of

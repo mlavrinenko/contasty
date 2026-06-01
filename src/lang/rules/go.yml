@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# Go strip rules. Each entry selects an anchor node via an ast-grep rule, then
+# acts on it (optionally descending into a named field first). Kinds/fields are
+# tree-sitter-go (ast-grep's SupportLang::Go).
+#
+# No const/var value elision: the generic `{}` elision marker is a valid empty
+# block (so function `body` elision is fine) but not a valid Go expression, so
+# splicing it into a `var x = {}` initializer would break the parse. Value
+# initializers are left intact (documented in docs/languages.md).
+language: go
+rules:
+  # Elide every free-function and method body (a `block`).
+  - action: elide
+    field: body
+    rule:
+      any:
+        - kind: function_declaration
+        - kind: method_declaration
+
+  # Truncate long string literals over the size threshold. Import paths are also
+  # `interpreted_string_literal` but stay well under the default threshold, and
+  # imports are dropped by their own rule below.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      any:
+        - kind: interpreted_string_literal
+        - kind: raw_string_literal
+
+  # Drop every comment (`//`, `/* */`) when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment
+
+  # Drop `import` declarations (both single and grouped) when imports are
+  # excluded.
+  - action: delete
+    when: imports
+    rule:
+      kind: import_declaration
+
+  # Drop test / benchmark / example / fuzz functions when tests are excluded:
+  # a `function_declaration` whose name carries a Go testing prefix. contasty
+  # matches on the AST, not the `_test.go` filename, so this name heuristic is
+  # the detection signal (see docs/languages.md).
+  - action: delete
+    when: tests
+    rule:
+      kind: function_declaration
+      has:
+        field: name
+        regex: '^(Test|Benchmark|Example|Fuzz)'

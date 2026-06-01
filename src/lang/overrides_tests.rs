@@ -134,7 +134,7 @@ fn unknown_language_in_rules_table_is_an_error() {
     let dir = tempfile::tempdir().expect("tempdir");
     let config = config_with_rule(
         dir.path(),
-        "python",
+        "nonexistent-lang",
         LangConfig {
             extend: Some("x.yml".into()),
             ..LangConfig::default()

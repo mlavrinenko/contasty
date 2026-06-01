@@ -56,6 +56,12 @@ off and the same key reports that the feature is missing — again, never silent
 Today the only registered language with a Topiary query is Rust. The supported
 set grows as more bundled grammars gain queries.
 
+The Tier 1 built-ins (TypeScript, TSX, JavaScript, Python, Go) ship no embedded
+Topiary query yet, so `reformat = "topiary"` is a config error for them. Tidy
+their splice output with a shell-out command instead — `["gofmt"]`,
+`["black", "-", "-q"]`, `["prettier", "--parser", "typescript"]`, etc. (see
+[Shell-out mode](#shell-out-mode)).
+
 ### Maintenance
 
 `topiary-core` and `ast-grep-core` both link the native `tree-sitter` library,

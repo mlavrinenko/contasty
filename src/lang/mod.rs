@@ -366,21 +366,28 @@ impl Registry {
     /// Returns [`AppError::Rule`] / [`AppError::RuleParse`] if any embedded rule
     /// set fails to parse or compile. This is effectively a build-time bug.
     pub fn new() -> Result<Self, AppError> {
+        // Every built-in registers with `Reformatter::None`: the engine ships no
+        // per-language formatter; reformatting is opt-in (see reformat.rs).
+        let builtin = |name, yaml| Language::from_rules(name, yaml, Reformatter::None);
         Ok(Self {
             langs: vec![
-                Language::from_rules("rust", include_str!("rules/rust.yml"), Reformatter::None)?,
-                Language::from_rules("php", include_str!("rules/php.yml"), Reformatter::None)?,
+                builtin("rust", include_str!("rules/rust.yml"))?,
+                builtin("php", include_str!("rules/php.yml"))?,
+                builtin("typescript", include_str!("rules/typescript.yml"))?,
+                builtin("tsx", include_str!("rules/tsx.yml"))?,
+                builtin("javascript", include_str!("rules/javascript.yml"))?,
+                builtin("python", include_str!("rules/python.yml"))?,
+                builtin("go", include_str!("rules/go.yml"))?,
             ],
         })
     }
 
     /// Build the registry with the built-ins plus every configured custom
-    /// grammar, then apply the per-language rule overrides. Registers the
-    /// dynamic grammars (those `[languages.<lang>]` entries with a `libraryPath`,
-    /// process-global, once), compiles each one's rule file, and finally
-    /// extends/replaces any language whose entry sets `extend` / `override`,
-    /// then resolves each entry's `reformat` backend (unless `--no-reformat`).
-    /// All paths resolve against the config file's directory.
+    /// grammar, then apply the per-language rule overrides. Registers the dynamic
+    /// grammars (`[languages.<lang>]` entries with a `libraryPath`, once),
+    /// compiles each one's rule file, extends/replaces any language whose entry
+    /// sets `extend` / `override`, then resolves each entry's `reformat` backend
+    /// (unless `--no-reformat`). Paths resolve against the config file's dir.
     ///
     /// # Errors
     ///

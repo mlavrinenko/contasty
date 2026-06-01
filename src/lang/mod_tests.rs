@@ -60,7 +60,7 @@ fn rejects_unknown_rule_key() {
 fn detect_matches_known_extension() {
     let reg = Registry::new().expect("registry init");
     assert!(reg.detect(Path::new("foo.rs")).is_some());
-    assert!(reg.detect(Path::new("foo.py")).is_none());
+    assert!(reg.detect(Path::new("foo.unknownext")).is_none());
     assert!(reg.detect(Path::new("noext")).is_none());
 }
 

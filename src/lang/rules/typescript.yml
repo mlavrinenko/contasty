@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# TypeScript strip rules. Each entry selects an anchor node via an ast-grep rule,
+# then acts on it (optionally descending into a named field first). Kinds/fields
+# are tree-sitter-typescript (`typescript` grammar, the variant ast-grep's
+# SupportLang::TypeScript binds). The `tsx.yml` and `javascript.yml` rule sets are
+# deliberate near-duplicates — the grammars share node kinds, so the rules are the
+# same; each language ships a self-contained file (see docs/languages.md).
+language: typescript
+rules:
+  # Elide every function / method / closure body. Arrow functions with an
+  # expression body (`(x) => x`) have that expression as their `body` field, so
+  # eliding yields `(x) => {}` — valid and intent-preserving. Overload and
+  # ambient signatures carry no `body` field and are left verbatim.
+  - action: elide
+    field: body
+    rule:
+      any:
+        - kind: function_declaration
+        - kind: function_expression
+        - kind: arrow_function
+        - kind: method_definition
+        - kind: generator_function_declaration
+        - kind: generator_function
+
+  # Elide large object / array initializers of a `const` / `let` / `var`. Guarded
+  # to data literals so function-valued declarations keep their signature (their
+  # body is already elided above). The `{}` marker reads naturally for objects.
+  - action: elide
+    field: value
+    min-bytes: elide-min
+    rule:
+      kind: variable_declarator
+      has:
+        field: value
+        any:
+          - kind: object
+          - kind: array
+
+  # Truncate long string and template-string literals over the size threshold.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      any:
+        - kind: string
+        - kind: template_string
+
+  # Drop every comment (`//`, `/* */`, `/** */`) when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment
+
+  # Drop `import` statements when imports are excluded. `export` declarations are
+  # structure, not imports, so they are kept.
+  - action: delete
+    when: imports
+    rule:
+      kind: import_statement
+
+  # Drop `describe` / `it` / `test` / `suite` blocks when tests are excluded:
+  # an `expression_statement` whose call target is one of those globals. Deletes
+  # the whole statement (semicolon included). Heuristic — catches the conventional
+  # BDD entry points; misses `it.skip` / `test.each` member-call forms (see
+  # docs/languages.md).
+  - action: delete
+    when: tests
+    rule:
+      kind: expression_statement
+      has:
+        kind: call_expression
+        has:
+          field: function
+          regex: '^(describe|it|test|suite)$'

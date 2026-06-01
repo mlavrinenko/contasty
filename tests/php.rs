@@ -32,7 +32,7 @@ fn php_extension_is_registered() {
     let reg = Registry::new().expect("registry init");
     assert!(reg.detect(Path::new("foo.php")).is_some());
     assert!(reg.detect(Path::new("foo.rs")).is_some());
-    assert!(reg.detect(Path::new("foo.py")).is_none());
+    assert!(reg.detect(Path::new("foo.unknownext")).is_none());
 }
 
 #[test]

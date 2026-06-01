@@ -9,19 +9,28 @@ per-language matching logic in Rust.
 
 ## Supported languages
 
-| Language | Rule file                  | Test detection                                   |
-| -------- | -------------------------- | ------------------------------------------------ |
-| Rust     | `src/lang/rules/rust.yml`  | `#[test]` / `#[cfg(test)]` items.                |
-| PHP      | `src/lang/rules/php.yml`   | `class_declaration` whose name ends in `Test`.   |
+| Language   | Rule file                        | Value elision | Test detection                                          |
+| ---------- | -------------------------------- | ------------- | ------------------------------------------------------- |
+| Rust       | `src/lang/rules/rust.yml`        | const/static/type | `#[test]` / `#[cfg(test)]` items.                   |
+| PHP        | `src/lang/rules/php.yml`         | —             | `class_declaration` whose name ends in `Test`.          |
+| TypeScript | `src/lang/rules/typescript.yml`  | object/array  | `describe` / `it` / `test` / `suite` call statements.   |
+| TSX        | `src/lang/rules/tsx.yml`         | object/array  | `describe` / `it` / `test` / `suite` call statements.   |
+| JavaScript | `src/lang/rules/javascript.yml`  | object/array  | `describe` / `it` / `test` / `suite` call statements.   |
+| Python     | `src/lang/rules/python.yml`      | dict/list/set | `test_*` functions and `Test*` classes.                 |
+| Go         | `src/lang/rules/go.yml`          | —             | `Test*` / `Benchmark*` / `Example*` / `Fuzz*` functions. |
 
-PHP binds tree-sitter-php's `php_only` grammar (the variant ast-grep's
-`SupportLang::Php` uses), so kinds/fields come from `php_only/src/node-types.json`.
-Its ragged splice output can be tidied — see [reformatting.md](reformatting.md).
+Each is an embedded rule file plus a one-line `Registry::new` registration,
+riding the 28 grammars ast-grep 0.43 bundles — no `.so`, no config. Remaining
+bundled languages are tracked in `tasks/07-builtin-languages.md`; the rule files
+carry per-rule comments. Notes:
 
-PHPUnit test detection is a deliberately small heuristic: it deletes classes
-whose name carries the conventional `*Test` suffix. It does not catch `#[Test]`-
-annotated methods inside non-suffixed classes, data providers, or test traits;
-tighten later with relational rules (`has` on the `attributes` field) if needed.
+- The `{}` elision marker is generic. It is not a valid Go expression, so Go
+  elides only bodies and keeps `const`/`var` initializers (the "—" rows) intact.
+- Test detection is by AST shape and name, not filename — a small heuristic
+  (e.g. PHP misses `#[Test]` methods; TS/JS miss `it.skip`); tighten later.
+- TypeScript / TSX / JavaScript share node kinds, so their three files are
+  deliberate self-contained near-duplicates, not shared via `extend` (which is a
+  user-rule mechanism, not wired between built-ins).
 
 ## Custom grammars (dynamic `.so`)
 
@@ -60,17 +69,15 @@ rules = "rules/mylang.yml"
 
 Relative `libraryPath` and `rules` paths resolve against the config file's
 directory. The grammar registers once at startup and is never unloaded
-(libloading keeps the library leaked on purpose — dropping it nulls its
-symbols), so every custom grammar must be declared in a single config.
-
-The rule file is identical in format and schema to a built-in's; only its
-`language:` names the custom grammar. Confirm `kind`/`field` names against the
-grammar's `node-types.json` as for any language.
+(libloading leaks the library on purpose — dropping it nulls its symbols), so
+every custom grammar must be declared in a single config. The rule file is
+identical in format and schema to a built-in's; only its `language:` names the
+custom grammar. Confirm `kind`/`field` names against the grammar's
+`node-types.json` as for any language.
 
 A missing library, wrong symbol, incompatible tree-sitter version, or a target
 absent from a `libraryPath` map fails with an actionable error, not a panic.
-Only native libraries are supported: ast-grep loads grammars through
-`libloading` and has no wasm path.
+Only native libraries are supported (ast-grep has no wasm path).
 
 ## Overriding a language's rules
 
@@ -106,8 +113,7 @@ Every shipped rule file starts with a modeline so editors backed by
 # yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
 ```
 
-The path is relative to the rule file. New rule files under `src/lang/rules/`
-use the same relative path.
+The path is relative to the rule file; new files under `src/lang/rules/` reuse it.
 
 [yaml-language-server]: https://github.com/redhat-developer/yaml-language-server
 
@@ -121,13 +127,7 @@ Map a file glob to the schema (see the [Zed YAML docs]):
   "lsp": {
     "yaml-language-server": {
       "settings": {
-        "yaml": {
-          "schemas": {
-            "./schemas/contasty-rules.schema.json": [
-              "src/lang/rules/*.yml"
-            ]
-          }
-        }
+        "yaml": { "schemas": { "./schemas/contasty-rules.schema.json": ["src/lang/rules/*.yml"] } }
       }
     }
   }

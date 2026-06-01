@@ -1,0 +1,81 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# Python strip rules. Each entry selects an anchor node via an ast-grep rule, then
+# acts on it (optionally descending into a named field first). Kinds/fields are
+# tree-sitter-python (ast-grep's SupportLang::Python). The `{}` elision marker is
+# a valid Python expression statement, so eliding a function `body` (a `block`)
+# leaves syntactically valid source.
+language: python
+rules:
+  # Elide every function / method body (a `block`). Class bodies are kept so
+  # method signatures survive; only the nested `function_definition` bodies go.
+  - action: elide
+    field: body
+    rule:
+      kind: function_definition
+
+  # Elide large dict / list / set initializers of a module-level assignment.
+  # Guarded to collection literals so a call-valued assignment keeps its RHS.
+  # `{}` reads naturally for a dict (an empty list/set becomes an empty dict —
+  # syntactically valid, intent-clear enough for context).
+  - action: elide
+    field: right
+    min-bytes: elide-min
+    rule:
+      kind: assignment
+      has:
+        field: right
+        any:
+          - kind: dictionary
+          - kind: list
+          - kind: set
+
+  # Truncate long string literals over the size threshold (docstrings included).
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      kind: string
+
+  # Drop every comment when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment
+
+  # Drop `import` / `from ... import` statements when imports are excluded.
+  - action: delete
+    when: imports
+    rule:
+      any:
+        - kind: import_statement
+        - kind: import_from_statement
+
+  # Drop tests when tests are excluded: pytest/unittest `test_*` functions and
+  # `Test*` classes. The decorated form is matched at the `decorated_definition`
+  # so its decorators go too (deleting only the inner function would orphan a
+  # decorator and break the parse). A plain `function_definition` rule covers the
+  # undecorated case; overlapping ranges are deduped by the splicer. Heuristic —
+  # catches the conventional names (see docs/languages.md).
+  - action: delete
+    when: tests
+    rule:
+      kind: decorated_definition
+      has:
+        field: definition
+        kind: function_definition
+        has:
+          field: name
+          regex: '^test'
+  - action: delete
+    when: tests
+    rule:
+      kind: function_definition
+      has:
+        field: name
+        regex: '^test'
+  - action: delete
+    when: tests
+    rule:
+      kind: class_definition
+      has:
+        field: name
+        regex: '^Test'

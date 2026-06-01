@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# JavaScript strip rules. The tree-sitter-javascript grammar (ast-grep's
+# SupportLang::JavaScript) shares every node kind these rules touch with
+# TypeScript; this file is the same rule set minus nothing type-specific (none of
+# the rules reference TS-only kinds). Kept self-contained (see docs/languages.md).
+language: javascript
+rules:
+  # Elide every function / method / closure body. Arrow functions with an
+  # expression body elide to `(x) => {}`.
+  - action: elide
+    field: body
+    rule:
+      any:
+        - kind: function_declaration
+        - kind: function_expression
+        - kind: arrow_function
+        - kind: method_definition
+        - kind: generator_function_declaration
+        - kind: generator_function
+
+  # Elide large object / array initializers, guarded to data literals.
+  - action: elide
+    field: value
+    min-bytes: elide-min
+    rule:
+      kind: variable_declarator
+      has:
+        field: value
+        any:
+          - kind: object
+          - kind: array
+
+  # Truncate long string and template-string literals over the size threshold.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      any:
+        - kind: string
+        - kind: template_string
+
+  # Drop every comment when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment
+
+  # Drop `import` statements when imports are excluded; keep `export`.
+  - action: delete
+    when: imports
+    rule:
+      kind: import_statement
+
+  # Drop `describe` / `it` / `test` / `suite` blocks when tests are excluded.
+  - action: delete
+    when: tests
+    rule:
+      kind: expression_statement
+      has:
+        kind: call_expression
+        has:
+          field: function
+          regex: '^(describe|it|test|suite)$'
