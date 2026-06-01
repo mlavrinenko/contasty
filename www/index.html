@@ -3,27 +3,125 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>contasty</title>
+  <title>contasty — strip code into tasty LLM context</title>
+  <meta name="description" content="contasty strips executable lines from your code, keeping declarations and signatures, to prepare tasty context for your agent.">
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 4rem auto; padding: 0 1rem; line-height: 1.6; }
-    h1 { margin-bottom: 0.25rem; }
-    code { background: #f4f4f4; padding: 0.15em 0.4em; border-radius: 3px; }
-    pre code { display: block; padding: 1em; overflow-x: auto; }
+    :root {
+      --amber: #FF7A18;
+      --amber-soft: #FFB347;
+      --ink: #1c1917;
+      --muted: #6b6862;
+      --bg: #fffdfa;
+      --card: #f7f4ef;
+      --line: #ece7df;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.6;
+      margin: 0;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 3.5rem 1.25rem 4rem; }
+    header { text-align: center; }
+    .logo { width: 88px; height: 88px; }
+    h1 { font-size: 2.6rem; margin: 0.6rem 0 0.2rem; letter-spacing: -0.02em; }
+    .tagline { font-size: 1.2rem; color: var(--muted); margin: 0 auto; max-width: 34rem; }
+    .cta { margin: 1.6rem 0 0.5rem; display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
+    a.btn {
+      display: inline-block; padding: 0.55rem 1.1rem; border-radius: 8px;
+      text-decoration: none; font-weight: 600; border: 1px solid var(--line);
+    }
+    a.btn.primary { background: var(--amber); color: #fff; border-color: var(--amber); }
+    a.btn.ghost { background: #fff; color: var(--ink); }
+    h2 { font-size: 1.3rem; margin: 2.6rem 0 0.6rem; }
+    p { color: #36322d; }
+    code { background: var(--card); padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.95em; }
+    pre {
+      background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+      padding: 1rem 1.1rem; overflow-x: auto; margin: 0;
+    }
+    pre code { background: none; padding: 0; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .grid figcaption { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+    figure { margin: 0; }
+    .arrow { text-align: center; color: var(--amber); font-weight: 700; }
+    ul.feat { padding-left: 1.1rem; }
+    ul.feat li { margin: 0.25rem 0; }
+    footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--line); text-align: center; color: var(--muted); font-size: 0.95rem; }
+    footer a { color: var(--amber); }
+    @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } h1 { font-size: 2.1rem; } }
   </style>
 </head>
 <body>
-  <h1>contasty</h1>
-  <p>Strips all executable likes from your code to prepare tasty context for your agent.</p>
+  <div class="wrap">
+    <header>
+      <img class="logo" src="./logo.svg" width="88" height="88" alt="contasty logo">
+      <h1>contasty</h1>
+      <p class="tagline">Strips executable lines from your code to prepare tasty context for your agent.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/mlavrinenko/contasty">GitHub</a>
+        <a class="btn ghost" href="https://crates.io/crates/contasty">crates.io</a>
+        <a class="btn ghost" href="https://github.com/mlavrinenko/contasty/blob/main/docs/languages.md">Docs</a>
+      </div>
+    </header>
 
-  <h2>Install</h2>
-  <pre><code>cargo install contasty</code></pre>
+    <h2>What it does</h2>
+    <p>
+      contasty walks a directory (respecting <code>.gitignore</code>), parses
+      each supported source file with <a href="https://ast-grep.github.io/">ast-grep</a>,
+      and elides function bodies, constant values, and long strings — keeping
+      declarations, signatures, and types intact. The result is a single
+      Markdown (or JSON) bundle, ready to paste into an LLM context window.
+    </p>
 
-  <p>Or download a binary from the
-    <a href="https://github.com/speconaut/contasty/releases/latest">latest release</a>.
-  </p>
+    <h2>Before / after</h2>
+    <div class="grid">
+      <figure>
+        <figcaption>your source</figcaption>
+        <pre><code>pub fn checkout(
+    cart: &amp;Cart,
+    user: &amp;User,
+) -&gt; Result&lt;Receipt&gt; {
+    let total = cart.total();
+    charge(user, total)?;
+    Ok(Receipt::new(total))
+}</code></pre>
+      </figure>
+      <figure>
+        <figcaption>contasty output</figcaption>
+        <pre><code>pub fn checkout(
+    cart: &amp;Cart,
+    user: &amp;User,
+) -&gt; Result&lt;Receipt&gt; {}</code></pre>
+      </figure>
+    </div>
+    <p class="arrow">↓ signatures stay, bodies go ↓</p>
 
-  <footer>
-    <p><a href="https://github.com/speconaut/contasty">GitHub</a></p>
-  </footer>
+    <h2>Install</h2>
+    <pre><code>cargo install contasty</code></pre>
+    <p>
+      Or download a pre-built binary from the
+      <a href="https://github.com/mlavrinenko/contasty/releases/latest">latest release</a>.
+    </p>
+
+    <h2>Highlights</h2>
+    <ul class="feat">
+      <li>Built-in Rust and PHP, driven by YAML ast-grep rule files.</li>
+      <li>Add a language with a dynamic <code>.so</code> grammar — no rebuild.</li>
+      <li>Extend or override any language's rules from <code>contasty.toml</code>.</li>
+      <li>Markdown or JSON output; drop tests, comments, and imports on demand.</li>
+    </ul>
+
+    <footer>
+      <p>
+        <a href="https://github.com/mlavrinenko/contasty">GitHub</a> ·
+        <a href="https://github.com/mlavrinenko/contasty/blob/main/docs/custom-rules.md">Custom rules</a> ·
+        MIT licensed
+      </p>
+    </footer>
+  </div>
 </body>
 </html>

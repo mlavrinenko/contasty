@@ -1,5 +1,9 @@
 # contasty
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mlavrinenko/contasty/main/www/logo.svg" alt="contasty logo" width="96" height="96">
+</p>
+
 [![CI](https://github.com/mlavrinenko/contasty/actions/workflows/ci.yml/badge.svg)](https://github.com/mlavrinenko/contasty/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/contasty.svg)](https://crates.io/crates/contasty)
 [![License: MIT](https://img.shields.io/crates/l/contasty.svg)](LICENSE-MIT)
