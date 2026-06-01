@@ -21,11 +21,28 @@ path = "src/lib.rs"
 name = "contasty"
 path = "src/main.rs"
 
+[features]
+# Embedded Topiary reformatter backend. Off by default: Topiary pulls a
+# tree-sitter grammar stack separate from ast-grep's, so the default binary
+# stays lean. Shell-out reformatting needs no feature.
+default = []
+topiary = [
+  "dep:topiary-core",
+  "dep:topiary-queries",
+  "dep:topiary-tree-sitter-facade",
+  "dep:tree-sitter-rust",
+]
+
 [dependencies]
 thiserror = "2"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+log = "0.4"
 env_logger = "0.11"
+topiary-core = { version = "0.7.3", optional = true }
+topiary-queries = { version = "0.7.3", optional = true, features = ["rust"] }
+topiary-tree-sitter-facade = { version = "0.7.3", optional = true }
+tree-sitter-rust = { version = "0.24", optional = true }
 ast-grep-core = "0.43"
 ast-grep-config = "0.43"
 ast-grep-language = "0.43"

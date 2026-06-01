@@ -28,6 +28,11 @@ test *ARGS:
 clippy:
     cargo clippy --workspace --all-targets -q -- -D warnings
 
+# Lint + test the embedded Topiary backend (feature off by default to stay lean)
+check-topiary:
+    chronic cargo clippy --workspace --all-targets --features topiary -q -- -D warnings
+    chronic cargo test --workspace --features topiary -q
+
 # Auto-fix clippy warnings (allow-dirty/-staged: fix-check runs pre-commit, tree is dirty)
 clippy-fix:
     cargo clippy --fix --workspace --all-targets --allow-dirty --allow-staged -- -D warnings

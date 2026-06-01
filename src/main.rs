@@ -60,6 +60,12 @@ struct Cli {
     #[arg(long, value_enum, default_value = "markdown")]
     format: OutputFormat,
 
+    /// Disable all post-strip reformatting, including built-in passes and any
+    /// `reformat` configured in `contasty.toml`. Useful to skip a slow or
+    /// untrusted shell-out formatter without editing config.
+    #[arg(long)]
+    no_reformat: bool,
+
     /// Path to a `contasty.toml` configuration file.
     /// When not set, defaults to `contasty.toml` in the current directory.
     #[arg(long)]
@@ -112,7 +118,8 @@ fn main() -> Result<()> {
     let m = Cli::command().get_matches();
     let cli = Cli::from_arg_matches(&m)?;
     let cwd = std::env::current_dir()?;
-    let config = Config::load(cli.config.as_deref(), &cwd);
+    let mut config = Config::load(cli.config.as_deref(), &cwd);
+    config.no_reformat = cli.no_reformat;
     let override_sel = cli_override(&ordered_selectors(&m));
     let items = contasty::collect(&cli.path, override_sel, &config)?;
     if cli.stats {

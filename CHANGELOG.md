@@ -46,6 +46,14 @@ First public release (not yet tagged).
   at a user rule file to append to (`extend`) or replace (`override`) its
   embedded rules. Missing or incompatible libraries fail with an actionable
   error.
+- Per-language post-strip reformatter via the `reformat` key of a
+  `[languages.<lang>]` entry: `"none"`, `"topiary"` (embedded Topiary, behind
+  the `topiary` build feature), or `{ command = [...] }` (shell out to an
+  external formatter over stdin/stdout). Rust keeps prettyplease as its default.
+  A reformat failure (missing tool, non-zero exit, timeout, unsupported
+  language) degrades to the raw splice with a warning; an unavailable Topiary
+  selection is a clear config error. The `--no-reformat` flag disables all
+  reformatting for a run. See `docs/reformatting.md`.
 - String truncation: literals longer than `max_string_bytes` are replaced with
   a truncation marker. Blank-line runs are collapsed.
 - `--format=<markdown|json>`: Markdown document (default) or a pretty-printed

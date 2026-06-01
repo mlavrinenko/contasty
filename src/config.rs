@@ -79,6 +79,42 @@ pub struct LangConfig {
     /// Replace the language's rules with this file outright (override mode).
     #[serde(default, rename = "override")]
     pub r#override: Option<PathBuf>,
+    /// Post-strip reformatter backend. Absent keeps the raw byte-splice (or the
+    /// language's built-in formatter, e.g. Rust's prettyplease). See [`Reformat`].
+    #[serde(default)]
+    pub reformat: Option<Reformat>,
+}
+
+/// Post-strip reformatter selection for a language (the `reformat` key of a
+/// `[languages.<lang>]` entry).
+///
+/// - absent / `reformat = "none"` — keep the raw splice (or the language's
+///   built-in formatter, e.g. Rust's prettyplease).
+/// - `reformat = "topiary"` — embedded Topiary backend (needs the `topiary`
+///   build feature and a Topiary query for the language).
+/// - `reformat = { command = ["prettier", "--parser", "php"] }` — shell out to
+///   an external formatter: stripped source on stdin, formatted source on stdout.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum Reformat {
+    /// A named backend selected by a bare string (`"none"` / `"topiary"`).
+    Mode(ReformatMode),
+    /// A shell-out command vector (argv; no shell interpolation).
+    Command {
+        /// Program plus arguments. The first element is the executable.
+        command: Vec<String>,
+    },
+}
+
+/// The bare-string reformatter backends.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReformatMode {
+    /// Keep the unformatted splice (or a built-in formatter); disables an
+    /// inherited backend.
+    None,
+    /// Embedded Topiary backend.
+    Topiary,
 }
 
 impl LangConfig {
@@ -132,6 +168,11 @@ pub struct Config {
     /// never deserialized.
     #[serde(skip)]
     pub base: PathBuf,
+    /// Runtime kill-switch: when set, every language's reformatter is forced to
+    /// `none` regardless of config (the `--no-reformat` CLI flag). Set by the
+    /// caller after load, never deserialized.
+    #[serde(skip)]
+    pub no_reformat: bool,
 }
 
 /// Resolved rule-override mode of a [`LangConfig`]: which file, applied how.
@@ -404,6 +445,38 @@ tests = true\n";
             matches!(rust.rule_source(), Ok(None)),
             "no extend/override: no rule source"
         );
+    }
+
+    #[test]
+    fn reformat_parses_named_mode() {
+        let config: Config =
+            toml::from_str("[languages.rust]\nreformat = \"topiary\"\n").expect("parse");
+        let rust = config.languages.get("rust").expect("rust entry");
+        assert!(
+            matches!(rust.reformat, Some(Reformat::Mode(ReformatMode::Topiary))),
+            "reformat string did not parse as a named mode"
+        );
+    }
+
+    #[test]
+    fn reformat_parses_command_vector() {
+        let toml = "[languages.typescript]\nreformat = { command = [\"prettier\", \"--parser\", \"typescript\"] }\n";
+        let config: Config = toml::from_str(toml).expect("parse");
+        let entry = config.languages.get("typescript").expect("ts entry");
+        match &entry.reformat {
+            Some(Reformat::Command { command }) => {
+                assert_eq!(command, &["prettier", "--parser", "typescript"]);
+            }
+            other => panic!("expected a command vector, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn reformat_absent_is_none() {
+        let config: Config =
+            toml::from_str("[languages.php.include]\ntests = true\n").expect("parse");
+        let php = config.languages.get("php").expect("php entry");
+        assert!(php.reformat.is_none(), "absent reformat should be None");
     }
 
     #[test]

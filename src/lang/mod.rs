@@ -22,10 +22,15 @@ use serde::Deserialize;
 use crate::AppError;
 use crate::config::{CompactConfig, Config};
 use crate::lang::dynamic::Lang;
+use crate::lang::reformat::Reformatter;
 
 mod dynamic;
 mod overrides;
+mod reformat;
 mod rust;
+mod shellout;
+#[cfg(feature = "topiary")]
+mod topiary;
 
 type Doc = StrDoc<Lang>;
 type AstNode<'r> = ast_grep_core::Node<'r, Doc>;
@@ -36,10 +41,11 @@ pub struct Language {
     pub name: &'static str,
     lang: Lang,
     rules: Vec<CompiledRule>,
-    /// Optional source formatter applied after splicing. Returns `None` if it
-    /// cannot handle the (post-strip) source — caller keeps the unformatted
-    /// output rather than failing the whole file.
-    format: Option<fn(&str) -> Option<String>>,
+    /// Post-strip reformatter applied after splicing. Defaults to a built-in
+    /// (Rust prettyplease) or `None`; the `reformat` config key overrides it
+    /// with Topiary or a shell-out command. A failure falls back to the
+    /// unformatted splice rather than failing the whole file.
+    reformat: Reformatter,
 }
 
 /// One compiled strip rule: an ast-grep matcher plus what to do with its hits.
@@ -180,11 +186,7 @@ impl Language {
     /// [`AppError::RuleParse`] if the YAML is malformed, [`AppError::Rule`] if
     /// the declared language is unknown or any rule fails to compile against the
     /// grammar.
-    fn from_rules(
-        name: &'static str,
-        yaml: &str,
-        format: Option<fn(&str) -> Option<String>>,
-    ) -> Result<Self, AppError> {
+    fn from_rules(name: &'static str, yaml: &str, reformat: Reformatter) -> Result<Self, AppError> {
         let file: RuleFile = serde_yaml::from_str(yaml)?;
         let lang = Lang::from_str(&file.language)?;
         let rules = file
@@ -196,7 +198,7 @@ impl Language {
             name,
             lang,
             rules,
-            format,
+            reformat,
         })
     }
 
@@ -227,15 +229,7 @@ impl Language {
         };
         let ranges = self.collect(&grep, &opts);
         let spliced = splice(source, &ranges);
-        // Only format when comments are dropped: `syn`-based formatters discard
-        // non-doc comments, so formatting under --include-comments would lose them.
-        if !drop_comments {
-            return Ok(spliced);
-        }
-        Ok(self
-            .format
-            .and_then(|formatter| formatter(&spliced))
-            .unwrap_or(spliced))
+        Ok(self.reformat.apply(&spliced, drop_comments))
     }
 
     fn collect(&self, grep: &AstGrep<Doc>, opts: &StripOptions) -> Vec<(usize, usize, Action)> {
@@ -375,8 +369,8 @@ impl Registry {
     pub fn new() -> Result<Self, AppError> {
         Ok(Self {
             langs: vec![
-                Language::from_rules("rust", rust::RULES, Some(rust::format))?,
-                Language::from_rules("php", include_str!("rules/php.yml"), None)?,
+                Language::from_rules("rust", rust::RULES, Reformatter::Builtin(rust::format))?,
+                Language::from_rules("php", include_str!("rules/php.yml"), Reformatter::None)?,
             ],
         })
     }
@@ -385,17 +379,19 @@ impl Registry {
     /// grammar, then apply the per-language rule overrides. Registers the
     /// dynamic grammars (those `[languages.<lang>]` entries with a `libraryPath`,
     /// process-global, once), compiles each one's rule file, and finally
-    /// extends/replaces any language whose entry sets `extend` / `override`. All
-    /// paths resolve against the config file's directory.
+    /// extends/replaces any language whose entry sets `extend` / `override`,
+    /// then resolves each entry's `reformat` backend (unless `--no-reformat`).
+    /// All paths resolve against the config file's directory.
     ///
     /// # Errors
     ///
     /// [`AppError::CustomLang`] if a grammar fails to load, lacks `extensions` /
     /// `rules`, or its rule file is unreadable; [`AppError::Config`] if an
     /// `extend` / `override` entry is malformed (both mode keys, unknown
-    /// language, unreadable file, mismatched `language:`); [`AppError::Rule`] /
-    /// [`AppError::RuleParse`] if any rule file is malformed or references kinds
-    /// the grammar lacks.
+    /// language, unreadable file, mismatched `language:`), or a `reformat` entry
+    /// names an unknown language, an empty command, or unavailable Topiary;
+    /// [`AppError::Rule`] / [`AppError::RuleParse`] if any rule file is malformed
+    /// or references kinds the grammar lacks.
     pub fn with_config(config: &Config) -> Result<Self, AppError> {
         let mut registry = Self::new()?;
         let base = config.base.as_path();
@@ -417,9 +413,14 @@ impl Registry {
             let leaked: &'static str = Box::leak(name.clone().into_boxed_str());
             registry
                 .langs
-                .push(Language::from_rules(leaked, &yaml, None)?);
+                .push(Language::from_rules(leaked, &yaml, Reformatter::None)?);
         }
         registry.apply_overrides(&config.languages, base)?;
+        if config.no_reformat {
+            registry.disable_reformat();
+        } else {
+            registry.apply_reformatters(&config.languages)?;
+        }
         Ok(registry)
     }
 

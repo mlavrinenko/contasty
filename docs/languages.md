@@ -16,7 +16,7 @@ per-language matching logic in Rust.
 
 PHP binds tree-sitter-php's `php_only` grammar (the variant ast-grep's
 `SupportLang::Php` uses), so kinds/fields come from `php_only/src/node-types.json`.
-It has no post-strip formatter wired (`format` is `None`).
+Its ragged splice output can be tidied — see [reformatting.md](reformatting.md).
 
 PHPUnit test detection is a deliberately small heuristic: it deletes classes
 whose name carries the conventional `*Test` suffix. It does not catch `#[Test]`-

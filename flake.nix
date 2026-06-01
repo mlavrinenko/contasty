@@ -56,6 +56,7 @@
             just
             moreutils
             nixd
+            pretty-php
             rust-analyzer
           ]);
         };

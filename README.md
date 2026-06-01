@@ -49,6 +49,7 @@ contasty --include=everything --exclude=imports  # all except imports
 contasty --format=json src/            # emit a JSON bundle instead of Markdown
 contasty --stats src/                  # print compactization statistics
 contasty --config path.toml src/       # use a specific contasty.toml
+contasty --no-reformat src/            # skip all post-strip reformatting
 ```
 
 Output defaults to Markdown. Pass `--format=json` for a pretty-printed JSON
@@ -92,6 +93,10 @@ comments = true    # keep doc comments for Rust only
 ```
 
 CLI flags override config for all languages. Config loads first; CLI wins.
+
+Per-language post-strip reformatting (cosmetic; Rust uses prettyplease by
+default) is configured with the `reformat` key — embedded Topiary or a shell-out
+command. See [docs/reformatting.md](docs/reformatting.md).
 
 ## Adding a language
 

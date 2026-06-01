@@ -22,7 +22,7 @@ live in git history (removed from the working tree at release). Read one with
 - [x] 03 — PHP language, zero Rust
 - [x] 04 — Custom `.so` grammars via ast-grep-dynamic
 - [x] 05 — User-extensible & overridable rule sets
-- [ ] 06 — Generic reformatter: embedded Topiary + shell-out (`06-generic-reformatter.md`)
+- [x] 06 — Generic reformatter: embedded Topiary + shell-out (`06-generic-reformatter.md`)
 - [ ] 07 — Built-in support for every ast-grep bundled language (`07-builtin-languages.md`)
 
 ## Order
