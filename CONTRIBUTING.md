@@ -50,6 +50,9 @@ Every commit footer carries a `Refs:` pointing at the task file it advances:
 Refs: tasks/01-engine-swap.md
 ```
 
-Tasks live in `tasks/`, one Markdown file per task, each sized for a single dense
-session. See `tasks/README.md` for the index and conventions. A commit that does
-not advance a planned task uses `Refs: tasks/README.md`.
+The `tasks/` directory was removed from the working tree at the `0.1.0` release;
+its files survive in git history. A `Refs:` path therefore resolves against
+history, not the working tree — read a referenced task with
+`git show <commit>:tasks/01-engine-swap.md` or `git log -- tasks/01-engine-swap.md`.
+A commit that does not advance a planned task (release prep, maintenance, docs)
+uses `Refs: CHANGELOG.md`.
