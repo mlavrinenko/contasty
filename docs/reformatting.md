@@ -61,7 +61,19 @@ off and the same key reports that the feature is missing — again, never silent
 
 Today the only registered language with a Topiary query is Rust (which can swap
 its prettyplease default for Topiary). The supported set grows as more bundled
-grammars gain queries.
+grammars gain queries. Rust keeps prettyplease as its always-on default
+regardless: Topiary is opt-in and heavy, so the default binary must not depend
+on it for the one language that already formats cleanly.
+
+### Maintenance
+
+`topiary-core` and `ast-grep-core` both link the native `tree-sitter` library,
+and cargo permits only one version of a `links` crate in the dependency graph.
+The pins in `Cargo.toml` are aligned on tree-sitter 0.26 (topiary-core 0.7.3 ↔
+ast-grep-core 0.43). When bumping `ast-grep-*`, check its tree-sitter minor and
+pin a `topiary-core` built against the same one, or the `topiary` feature stops
+resolving (`only one package in the dependency graph may specify the same links
+value`). The default build is unaffected — it pulls no Topiary crates.
 
 ## Shell-out mode
 

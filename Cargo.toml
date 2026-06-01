@@ -39,6 +39,13 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 log = "0.4"
 env_logger = "0.11"
+# Embedded Topiary backend (feature `topiary`). VERSION CONSTRAINT: topiary-core
+# and ast-grep-core both link the native `tree-sitter` library, and cargo allows
+# only one version of a `links` crate in the graph. topiary-core 0.7.3 tracks
+# tree-sitter ^0.26, matching ast-grep-core 0.43's tree-sitter 0.26.x. When you
+# bump ast-grep-* below, re-check its tree-sitter minor and pin a topiary-core
+# that uses the same one, or the `topiary` feature stops resolving. See
+# docs/reformatting.md ("Maintenance").
 topiary-core = { version = "0.7.3", optional = true }
 topiary-queries = { version = "0.7.3", optional = true, features = ["rust"] }
 topiary-tree-sitter-facade = { version = "0.7.3", optional = true }
