@@ -18,28 +18,38 @@ per-language matching logic in Rust.
 | JavaScript | `src/lang/rules/javascript.yml`  | object/array  | `describe` / `it` / `test` / `suite` call statements.   |
 | Python     | `src/lang/rules/python.yml`      | dict/list/set | `test_*` functions and `Test*` classes.                 |
 | Go         | `src/lang/rules/go.yml`          | —             | `Test*` / `Benchmark*` / `Example*` / `Fuzz*` functions. |
+| Java       | `src/lang/rules/java.yml`        | —             | `@Test`-family methods; `*Test` / `*Tests` / `*IT` classes. |
+| C#         | `src/lang/rules/csharp.yml`      | —             | `[Fact]` / `[Theory]` / `[Test]` / `[TestMethod]` methods; `*Test` / `*Tests` classes. |
+| Ruby       | `src/lang/rules/ruby.yml`        | hash          | `test_*` methods; `describe` / `it` / `context` / ... blocks. |
+| C++        | `src/lang/rules/cpp.yml`         | aggregate-init | `TEST` / `TEST_F` / `TEST_P` / `TYPED_TEST` macros.    |
+| C          | `src/lang/rules/c.yml`           | aggregate-init | `test_*` functions (Unity / CMocka naming).            |
+| Kotlin     | `src/lang/rules/kotlin.yml`      | —             | `@Test`-family functions.                               |
+| Swift      | `src/lang/rules/swift.yml`       | —             | `test*` functions (XCTest naming).                      |
+| Scala      | `src/lang/rules/scala.yml`       | —             | `*Test` / `*Spec` / `*Suite` classes/objects.           |
 
 Each is an embedded rule file plus a one-line `Registry::new` registration,
 riding the 28 grammars ast-grep 0.43 bundles — no `.so`, no config. Remaining
 bundled languages are tracked in `tasks/07-builtin-languages.md`; the rule files
 carry per-rule comments. Notes:
 
-- The `{}` elision marker is generic. It is not a valid Go expression, so Go
-  elides only bodies and keeps `const`/`var` initializers (the "—" rows) intact.
-- Test detection is by AST shape and name, not filename — a small heuristic
-  (e.g. PHP misses `#[Test]` methods; TS/JS miss `it.skip`); tighten later.
-- TypeScript / TSX / JavaScript share node kinds, so their three files are
-  deliberate self-contained near-duplicates, not shared via `extend` (which is a
-  user-rule mechanism, not wired between built-ins).
+- The generic `{}` marker means value-init elision fires only where `{}` is
+  valid in that slot: C/C++ aggregate inits (`= { ... }` → `= {}`), Ruby hashes,
+  TS/TSX/JS object/array, Python dict/list/set. The "—" rows (Go, Java, C#,
+  Kotlin, Swift, Scala) have no brace value literal and keep initializers. Ruby
+  also has no brace body, but `{}` is a valid empty-hash statement so an elided
+  method body still parses; C# `=> expr` members and Swift computed properties
+  stay verbatim (neither is a brace body).
+- Test detection is by AST shape and name, not filename — a heuristic (PHP misses
+  `#[Test]`; TS/JS miss `it.skip`; C/Swift go by name). TS/TSX/JS share node
+  kinds, so their files are deliberate self-contained near-duplicates, not shared
+  via `extend` (a user-rule mechanism, not wired between built-ins).
 
 ## Custom grammars (dynamic `.so`)
 
 The 28 grammars ast-grep bundles cover the common case with zero `.so`. For a
-language it does not ship, supply a compiled native tree-sitter grammar plus a
-rule file and register it in `contasty.toml` — no rebuild of contasty.
-
-Build the grammar to a native shared library (one per OS/arch — native libraries
-are not portable):
+language it does not ship, build a native tree-sitter grammar (one per OS/arch —
+native libraries are not portable), supply a rule file, and register both in
+`contasty.toml` — no rebuild of contasty:
 
 ```sh
 tree-sitter build --output mylang.so   # run in the grammar repo
@@ -67,17 +77,14 @@ rules = "rules/mylang.yml"
 # expandoChar = "_"                       # identifier-safe stand-in for $
 ```
 
-Relative `libraryPath` and `rules` paths resolve against the config file's
+Relative `libraryPath` / `rules` paths resolve against the config file's
 directory. The grammar registers once at startup and is never unloaded
-(libloading leaks the library on purpose — dropping it nulls its symbols), so
-every custom grammar must be declared in a single config. The rule file is
-identical in format and schema to a built-in's; only its `language:` names the
-custom grammar. Confirm `kind`/`field` names against the grammar's
-`node-types.json` as for any language.
-
-A missing library, wrong symbol, incompatible tree-sitter version, or a target
-absent from a `libraryPath` map fails with an actionable error, not a panic.
-Only native libraries are supported (ast-grep has no wasm path).
+(libloading leaks the library on purpose), so every custom grammar must be
+declared in a single config. The rule file is identical to a built-in's; confirm
+`kind`/`field` names against the grammar's `node-types.json`. A missing library,
+wrong symbol, incompatible tree-sitter version, or a target absent from a
+`libraryPath` map fails with an actionable error, not a panic (only native
+libraries are supported — ast-grep has no wasm path).
 
 ## Overriding a language's rules
 
@@ -87,11 +94,10 @@ replaces its standard rules, with no rebuild — see
 
 ## Schema
 
-The rule file format is described by a generated JSON Schema (Draft 2020-12) at
-`schemas/contasty-rules.schema.json`. It is derived from the Rust config types,
-so it never drifts from the loader: the rule subtree (`rule:`) is composed
-directly from `ast-grep-config`'s own `SerializableRule` schema, giving you the
-full ast-grep rule grammar with completion and validation.
+The rule file format is a generated JSON Schema (Draft 2020-12) at
+`schemas/contasty-rules.schema.json`, derived from the Rust config types so it
+never drifts: the `rule:` subtree is composed from `ast-grep-config`'s own
+`SerializableRule` schema, giving the full ast-grep rule grammar with completion.
 
 Regenerate after changing a config struct:
 
@@ -123,19 +129,13 @@ Zed's YAML support is the same language server, configured in `settings.json`.
 Map a file glob to the schema (see the [Zed YAML docs]):
 
 ```json
-{
-  "lsp": {
-    "yaml-language-server": {
-      "settings": {
-        "yaml": { "schemas": { "./schemas/contasty-rules.schema.json": ["src/lang/rules/*.yml"] } }
-      }
-    }
-  }
-}
+{ "lsp": { "yaml-language-server": { "settings": {
+  "yaml": { "schemas": { "./schemas/contasty-rules.schema.json": ["src/lang/rules/*.yml"] } }
+} } } }
 ```
 
-The inline modeline already covers the shipped files; the glob mapping helps
-when authoring rule files that do not (yet) carry a modeline.
+The inline modeline already covers shipped files; the glob helps when authoring
+files that do not (yet) carry one.
 
 [Zed YAML docs]: https://zed.dev/docs/languages/yaml
 
@@ -186,15 +186,13 @@ the [ast-grep rule reference] for semantics.
 ### Thresholds
 
 `min-bytes` names a threshold resolved at strip time from the active
-`CompactConfig`:
-
-- `elide-min` — `elide_min_bytes` (skip eliding small const/static/type values).
-- `max-string` — `max_string_bytes` (only truncate long string literals).
-
-A rule without `min-bytes` always fires regardless of captured size.
+`CompactConfig`: `elide-min` (`elide_min_bytes`, skip small value elisions) or
+`max-string` (`max_string_bytes`, only truncate long strings). A rule without
+`min-bytes` always fires regardless of captured size.
 
 ### Verifying node kinds
 
-Rule `kind`/`field` names are tree-sitter grammar names, not guesses. Confirm
-them against the grammar's `node-types.json` (or `ast-grep` playground) before
-writing rules, especially for a new language.
+Rule `kind`/`field` names are tree-sitter grammar names, not guesses — confirm
+them against the grammar's `node-types.json` or the `ast-grep` playground,
+especially for a new language. (`ast-grep run --lang L -p "$(cat f)"
+--debug-query=ast f` dumps a file's tree.)

@@ -89,7 +89,24 @@ For every added language:
   - Go skips value-init elision: the generic `{}` marker is a valid empty block
     (bodies) but not a valid Go expression (initializers). Documented in
     `docs/languages.md`.
-- [ ] Tier 2: Java / CSharp / Ruby / Cpp / C / Kotlin / Swift / Scala
+- [x] Tier 2: Java / CSharp / Ruby / Cpp / C / Kotlin / Swift / Scala
+  - Rule files `src/lang/rules/{java,csharp,ruby,cpp,c,kotlin,swift,scala}.yml`,
+    registered in `Registry::new`.
+  - Fixture pairs + golden tests `tests/{java,csharp,ruby,cpp,c,kotlin,swift,scala}.rs`
+    with `tests/fixtures/<lang>/sample.<ext>` + `sample.stripped.<ext>`. Stripped
+    snapshots verified to parse with zero tree-sitter ERROR/MISSING nodes via
+    ast-grep; Ruby's `{}`-as-body splice additionally checked with `ruby -c`.
+  - Value-init elision only where `{}` is valid in that position: C/C++ elide an
+    already-brace `initializer_list` (`= { ... }` → `= {}`), Ruby elides hash
+    literals; Java/C#/Kotlin/Swift/Scala have no brace value literal and skip it
+    (the "—" rows, like Go). Documented in `docs/languages.md`.
+  - Per-language body quirks handled: Ruby has no brace body (a `body_statement`
+    elides to `{}`, a valid empty-hash statement); Kotlin exposes no `body` field
+    (anchor the `function_body` node, covering block and `= expr` bodies); C#
+    anchors the `block` node so expression-bodied `=> expr` members stay verbatim;
+    Swift computed properties are kept. Test conventions differ per language
+    (JUnit/NUnit/xUnit attributes, GoogleTest macros, `test_*` names, ScalaTest
+    `*Spec` classes) — see the per-language table.
 - [ ] Tier 3: remaining + data/markup languages (or documented skips)
 
 ## Open questions

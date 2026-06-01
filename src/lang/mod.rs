@@ -378,6 +378,14 @@ impl Registry {
                 builtin("javascript", include_str!("rules/javascript.yml"))?,
                 builtin("python", include_str!("rules/python.yml"))?,
                 builtin("go", include_str!("rules/go.yml"))?,
+                builtin("java", include_str!("rules/java.yml"))?,
+                builtin("csharp", include_str!("rules/csharp.yml"))?,
+                builtin("ruby", include_str!("rules/ruby.yml"))?,
+                builtin("cpp", include_str!("rules/cpp.yml"))?,
+                builtin("c", include_str!("rules/c.yml"))?,
+                builtin("kotlin", include_str!("rules/kotlin.yml"))?,
+                builtin("swift", include_str!("rules/swift.yml"))?,
+                builtin("scala", include_str!("rules/scala.yml"))?,
             ],
         })
     }

@@ -18,8 +18,9 @@ paste into an LLM context window.
 
 Each language is driven by a YAML rule file matched against the AST, not by
 hardcoded per-language logic. Built-in support: Rust, PHP, TypeScript, TSX,
-JavaScript, Python, and Go. You can add a language with a dynamic tree-sitter
-grammar, and extend or override any language's rules from `contasty.toml` — both
+JavaScript, Python, Go, Java, C#, Ruby, C++, C, Kotlin, Swift, and Scala. You can
+add a language with a dynamic tree-sitter grammar, and extend or override any
+language's rules from `contasty.toml` — both
 without rebuilding contasty.
 
 ## Install

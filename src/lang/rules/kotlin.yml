@@ -1,0 +1,58 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# Kotlin strip rules. Each entry selects an anchor node via an ast-grep rule, then
+# acts on it (optionally descending into a named field first). Kinds/fields are
+# tree-sitter-kotlin (ast-grep's SupportLang::Kotlin).
+#
+# No value-init elision: Kotlin has no brace-delimited collection literal
+# (`listOf(...)` / `mapOf(...)` are calls) and the generic `{}` marker is a lambda
+# literal, so eliding a value would silently retype it. Property initializers are
+# left intact (documented in docs/languages.md).
+language: kotlin
+rules:
+  # Elide every function body. Kotlin exposes no `body` field; the body is a
+  # `function_body` node — either a `{ ... }` block (elides to `{}`) or an
+  # `= expr` expression body (elides to `{}` too, a valid block body). `abstract` /
+  # `expect` functions carry no `function_body` and are left verbatim.
+  - action: elide
+    rule:
+      kind: function_body
+
+  # Truncate long string literals over the size threshold (`string_literal` also
+  # covers raw `"""..."""` strings).
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      kind: string_literal
+
+  # Drop every comment (`//`, `/* */`, `/** */`) when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      any:
+        - kind: line_comment
+        - kind: multiline_comment
+
+  # Drop `import` headers when imports are excluded. The `package` header is
+  # structure, not an import, so it is kept.
+  - action: delete
+    when: imports
+    rule:
+      kind: import_header
+
+  # Drop JUnit / Kotlin-test functions when tests are excluded: a
+  # `function_declaration` carrying a `@Test`-family annotation, deleted whole so
+  # the annotation goes too. Heuristic — catches the conventional `@Test` /
+  # `@ParameterizedTest` shapes (see docs/languages.md).
+  - action: delete
+    when: tests
+    rule:
+      kind: function_declaration
+      has:
+        kind: modifiers
+        has:
+          kind: annotation
+          has:
+            kind: user_type
+            has:
+              kind: type_identifier
+              regex: 'Test$'

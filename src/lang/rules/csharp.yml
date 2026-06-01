@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# C# strip rules. Each entry selects an anchor node via an ast-grep rule, then
+# acts on it (optionally descending into a named field first). Kinds/fields are
+# tree-sitter-c-sharp (ast-grep's SupportLang::CSharp).
+#
+# No value-init elision: the generic `{}` marker is a valid empty block (so body
+# elision is fine) but not a general C# expression (only an array/collection
+# initializer after `new`), so splicing it into `var x = ...` would break the
+# parse. Field initializers are left intact (documented in docs/languages.md).
+language: csharp
+rules:
+  # Elide every brace body. Method, constructor, accessor, local-function and
+  # block-bodied lambda bodies are all a `block`, eliding to `{}` (nested blocks
+  # fall inside an already-elided outer range, so the splicer skips them).
+  # Expression-bodied members (`=> expr`) use an `arrow_expression_clause`, not a
+  # `block`, and abstract / interface members have no body — both left verbatim.
+  - action: elide
+    rule:
+      kind: block
+
+  # Truncate long string literals over the size threshold: regular, verbatim
+  # (`@"..."`), and raw (`"""..."""`) string literals.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      any:
+        - kind: string_literal
+        - kind: verbatim_string_literal
+        - kind: raw_string_literal
+
+  # Drop every comment (`//`, `/* */`, `/// xml`) when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment
+
+  # Drop `using` directives when imports are excluded. `namespace` declarations
+  # (block and file-scoped) are structure, not imports, so they are kept.
+  - action: delete
+    when: imports
+    rule:
+      kind: using_directive
+
+  # Drop xUnit / NUnit / MSTest tests when tests are excluded: a `method_declaration`
+  # carrying a `[Fact]` / `[Theory]` / `[Test]` / `[TestMethod]` / `[TestCase]`
+  # attribute (deleted whole, so the attribute list goes too), and a
+  # `class_declaration` whose name ends in `Test` / `Tests`. Heuristic (see
+  # docs/languages.md).
+  - action: delete
+    when: tests
+    rule:
+      kind: method_declaration
+      has:
+        kind: attribute_list
+        has:
+          kind: attribute
+          has:
+            field: name
+            regex: '(^|\.)(Fact|Theory|Test|TestMethod|TestCase)$'
+  - action: delete
+    when: tests
+    rule:
+      kind: class_declaration
+      has:
+        field: name
+        regex: '(Test|Tests)$'

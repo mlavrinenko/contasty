@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# Swift strip rules. Each entry selects an anchor node via an ast-grep rule, then
+# acts on it (optionally descending into a named field first). Kinds/fields are
+# tree-sitter-swift (ast-grep's SupportLang::Swift).
+#
+# No value-init elision: Swift's `{}` marker is a closure, and array/dictionary
+# literals use `[...]`, so eliding a value would silently retype it. Property
+# initializers are left intact (documented in docs/languages.md).
+language: swift
+rules:
+  # Elide function / initializer bodies (each a `function_body`, eliding to `{}`).
+  # Protocol requirements carry no `body` field and are left verbatim. Computed
+  # properties (`var x: T { ... }`) use a separate `computed_property` and are kept.
+  - action: elide
+    field: body
+    rule:
+      any:
+        - kind: function_declaration
+        - kind: init_declaration
+
+  # Truncate long string literals over the size threshold: single-line and
+  # multi-line (`"""..."""`) strings.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      any:
+        - kind: line_string_literal
+        - kind: multi_line_string_literal
+
+  # Drop every comment (`//`, `/* */`) when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      any:
+        - kind: comment
+        - kind: multiline_comment
+
+  # Drop `import` declarations when imports are excluded.
+  - action: delete
+    when: imports
+    rule:
+      kind: import_declaration
+
+  # Drop XCTest tests when tests are excluded: a `function_declaration` whose name
+  # starts with `test` (the XCTest convention). contasty matches the AST, not the
+  # XCTestCase subclass, so this name heuristic is the detection signal (see
+  # docs/languages.md).
+  - action: delete
+    when: tests
+    rule:
+      kind: function_declaration
+      has:
+        field: name
+        regex: '^test'

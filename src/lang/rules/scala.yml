@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# Scala strip rules. Each entry selects an anchor node via an ast-grep rule, then
+# acts on it (optionally descending into a named field first). Kinds/fields are
+# tree-sitter-scala (ast-grep's SupportLang::Scala).
+#
+# No value-init elision: Scala has no brace-delimited collection literal
+# (`List(...)` / `Map(...)` are calls) and the generic `{}` marker is an empty
+# block, so eliding a value would silently retype it. Val/var initializers are
+# left intact (documented in docs/languages.md).
+language: scala
+rules:
+  # Elide every `def` body. A block body (`= { ... }`) and an expression body
+  # (`= expr`) both live in the `body` field; eliding to `{}` (an empty block) is
+  # valid in either position. Abstract `def`s carry no `body` field and are kept.
+  - action: elide
+    field: body
+    rule:
+      kind: function_definition
+
+  # Truncate long string literals over the size threshold. Interpolated strings
+  # (`s"..."`) are left intact (their substitutions matter and they are rarely
+  # long).
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      kind: string
+
+  # Drop every comment (`//`, `/* */`) when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      any:
+        - kind: comment
+        - kind: block_comment
+
+  # Drop `import` declarations when imports are excluded. The `package` clause is
+  # structure, not an import, so it is kept.
+  - action: delete
+    when: imports
+    rule:
+      kind: import_declaration
+
+  # Drop tests when tests are excluded: a `class` / `object` whose name ends in
+  # `Test` / `Spec` / `Suite` (the ScalaTest / MUnit / specs2 convention). Deleted
+  # whole. Heuristic (see docs/languages.md).
+  - action: delete
+    when: tests
+    rule:
+      any:
+        - kind: class_definition
+        - kind: object_definition
+      has:
+        field: name
+        regex: '(Test|Spec|Suite)$'

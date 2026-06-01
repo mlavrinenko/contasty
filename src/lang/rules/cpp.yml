@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# C++ strip rules. Each entry selects an anchor node via an ast-grep rule, then
+# acts on it (optionally descending into a named field first). Kinds/fields are
+# tree-sitter-cpp (ast-grep's SupportLang::Cpp).
+language: cpp
+rules:
+  # Elide function / method / constructor / lambda bodies (each a
+  # `compound_statement`). A constructor keeps its member-init list (`: x(t)`),
+  # which is outside the body field; only the `{ ... }` block elides to `{}`.
+  - action: elide
+    field: body
+    rule:
+      any:
+        - kind: function_definition
+        - kind: lambda_expression
+
+  # Elide large aggregate initializers (`int t[] = { ... }`). Scoped to the
+  # already-brace-delimited `initializer_list`, which elides to `{}` — a valid
+  # initializer. Scalar / constructor-call initializers are left intact.
+  - action: elide
+    field: value
+    min-bytes: elide-min
+    rule:
+      kind: init_declarator
+      has:
+        field: value
+        kind: initializer_list
+
+  # Truncate long string literals over the size threshold: regular and raw
+  # (`R"(...)"`) string literals.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      any:
+        - kind: string_literal
+        - kind: raw_string_literal
+
+  # Drop every comment (`//`, `/* */`) when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment
+
+  # Drop `#include` directives when imports are excluded. `namespace` definitions
+  # are structure, not imports, so they are kept.
+  - action: delete
+    when: imports
+    rule:
+      kind: preproc_include
+
+  # Drop GoogleTest cases when tests are excluded: a `TEST` / `TEST_F` / `TEST_P` /
+  # `TYPED_TEST` macro parses as a `function_definition` whose declarator name is
+  # the macro. Deleted whole. Heuristic — catches the dominant C++ convention (see
+  # docs/languages.md).
+  - action: delete
+    when: tests
+    rule:
+      kind: function_definition
+      has:
+        field: declarator
+        kind: function_declarator
+        has:
+          field: declarator
+          kind: identifier
+          regex: '^(TEST|TEST_F|TEST_P|TYPED_TEST)$'

@@ -1,0 +1,81 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# Ruby strip rules. Each entry selects an anchor node via an ast-grep rule, then
+# acts on it (optionally descending into a named field first). Kinds/fields are
+# tree-sitter-ruby (ast-grep's SupportLang::Ruby).
+#
+# Ruby has no brace-delimited body; a `method` body is a `body_statement` between
+# the signature and `end`. Eliding it to `{}` leaves `def m(...)\n  {}\nend` —
+# `{}` is a valid empty-hash expression statement, so the result still parses.
+language: ruby
+rules:
+  # Elide method / singleton-method bodies (a `body_statement`). `class` / `module`
+  # bodies are also `body_statement` but are not anchored here, so their method
+  # signatures survive — only the method bodies go.
+  - action: elide
+    field: body
+    rule:
+      any:
+        - kind: method
+        - kind: singleton_method
+
+  # Elide large hash initializers of an assignment (`X = { ... }`). `{}` is a valid
+  # empty hash, so the spliced result stays valid. Array literals are left intact —
+  # eliding `[...]` to `{}` would silently retype the value to a hash.
+  - action: elide
+    field: right
+    min-bytes: elide-min
+    rule:
+      kind: assignment
+      has:
+        field: right
+        kind: hash
+
+  # Truncate long string literals over the size threshold.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      kind: string
+
+  # Drop every comment (`#`) when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment
+
+  # Drop top-level `require` / `require_relative` / `load` / `autoload` calls when
+  # imports are excluded. Scoped to receiver-less calls so a `foo.require` method
+  # call on some object is kept.
+  - action: delete
+    when: imports
+    rule:
+      kind: call
+      not:
+        has:
+          field: receiver
+          regex: '.'
+      has:
+        field: method
+        regex: '^(require|require_relative|load|autoload)$'
+
+  # Drop tests when tests are excluded: Minitest `test_*` methods and the RSpec /
+  # Capybara DSL blocks (`describe` / `context` / `it` / ...), each a receiver-less
+  # call deleted whole (its `do ... end` block goes too). Heuristic — catches the
+  # conventional shapes (see docs/languages.md).
+  - action: delete
+    when: tests
+    rule:
+      kind: method
+      has:
+        field: name
+        regex: '^test_'
+  - action: delete
+    when: tests
+    rule:
+      kind: call
+      not:
+        has:
+          field: receiver
+          regex: '.'
+      has:
+        field: method
+        regex: '^(describe|context|it|specify|feature|scenario)$'

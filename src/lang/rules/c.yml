@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# C strip rules. Each entry selects an anchor node via an ast-grep rule, then
+# acts on it (optionally descending into a named field first). Kinds/fields are
+# tree-sitter-c (ast-grep's SupportLang::C).
+language: c
+rules:
+  # Elide every function body (a `compound_statement`). Prototypes (`int f(void);`)
+  # carry no `body` field and are left verbatim.
+  - action: elide
+    field: body
+    rule:
+      kind: function_definition
+
+  # Elide large aggregate initializers (`int t[] = { ... }`). Scoped to the
+  # already-brace-delimited `initializer_list`, which elides to `{}` (zero-init) —
+  # a valid C initializer. Scalar initializers (`int x = 0;`) are left intact.
+  - action: elide
+    field: value
+    min-bytes: elide-min
+    rule:
+      kind: init_declarator
+      has:
+        field: value
+        kind: initializer_list
+
+  # Truncate long string literals over the size threshold.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      kind: string_literal
+
+  # Drop every comment (`//`, `/* */`) when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment
+
+  # Drop `#include` directives when imports are excluded.
+  - action: delete
+    when: imports
+    rule:
+      kind: preproc_include
+
+  # Drop `test_*` functions when tests are excluded (the Unity / CMocka naming
+  # convention). contasty matches the AST, not a framework, so this name heuristic
+  # is the detection signal (see docs/languages.md).
+  - action: delete
+    when: tests
+    rule:
+      kind: function_definition
+      has:
+        field: declarator
+        kind: function_declarator
+        has:
+          field: declarator
+          kind: identifier
+          regex: '^test_'

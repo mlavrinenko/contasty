@@ -32,6 +32,13 @@ First public release (not yet tagged).
   imports / comments / tests by category, truncate long strings, and elide large
   object/array/dict initializers (Go keeps initializers — the `{}` marker is no
   valid Go expression). TS/TSX/JS ship self-contained near-duplicate rule files.
+- Tier 2 built-in languages (Java, C#, Ruby, C++, C, Kotlin, Swift, Scala): same
+  rules-only recipe. Elide function/method/constructor/lambda bodies, drop
+  imports / comments / tests by category, truncate long strings. Value-init
+  elision where `{}` is valid in position — C/C++ aggregate initializers and Ruby
+  hash literals; Java/C#/Kotlin/Swift/Scala keep initializers, like Go. Test
+  detection spans JUnit/NUnit/xUnit attributes, GoogleTest macros, `test_*` names,
+  and ScalaTest `*Spec` classes.
 - Category model with ordered, repeatable flags: `--include=<SEL>` /
   `--exclude=<SEL>` over `comments`, `imports`, `tests`, and `all` (alias
   `everything`). Both flags are processed left to right and the last mention of

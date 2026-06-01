@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# Java strip rules. Each entry selects an anchor node via an ast-grep rule, then
+# acts on it (optionally descending into a named field first). Kinds/fields are
+# tree-sitter-java (ast-grep's SupportLang::Java).
+#
+# No value-init elision: the generic `{}` marker is a valid empty block (so body
+# elision is fine) and a valid array initializer, but not a general Java
+# expression, so splicing it into `int x = ...` would break the parse. Field
+# initializers are left intact (documented in docs/languages.md), like Go.
+language: java
+rules:
+  # Elide method / constructor / lambda bodies. A `method_declaration` body is a
+  # `block`, a constructor's is a `constructor_body`, a lambda's is a `block` or
+  # expression — each elides to `{}`, a valid empty block. Abstract / interface
+  # methods carry no `body` field and are left verbatim.
+  - action: elide
+    field: body
+    rule:
+      any:
+        - kind: method_declaration
+        - kind: constructor_declaration
+        - kind: lambda_expression
+
+  # Truncate long string literals over the size threshold. A `string_literal`
+  # also covers text blocks (`"""..."""`).
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      kind: string_literal
+
+  # Drop every comment (`//`, `/* */`, `/** */`) when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      any:
+        - kind: line_comment
+        - kind: block_comment
+
+  # Drop `import` declarations when imports are excluded. `package` declarations
+  # are structure, not imports, so they are kept.
+  - action: delete
+    when: imports
+    rule:
+      kind: import_declaration
+
+  # Drop JUnit test classes/methods when tests are excluded: a `method_declaration`
+  # carrying an `@Test` / `@ParameterizedTest` / `@RepeatedTest` annotation (deleted
+  # whole, so the annotation goes too), and a `class_declaration` whose name ends
+  # in `Test` / `Tests` / `IT`. Heuristic — catches the conventional JUnit shapes
+  # (see docs/languages.md).
+  - action: delete
+    when: tests
+    rule:
+      kind: method_declaration
+      has:
+        kind: modifiers
+        has:
+          any:
+            - kind: marker_annotation
+            - kind: annotation
+          has:
+            field: name
+            regex: '(^|\.)(Test|ParameterizedTest|RepeatedTest)$'
+  - action: delete
+    when: tests
+    rule:
+      kind: class_declaration
+      has:
+        field: name
+        regex: '(Test|Tests|IT)$'

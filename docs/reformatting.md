@@ -62,6 +62,13 @@ their splice output with a shell-out command instead — `["gofmt"]`,
 `["black", "-", "-q"]`, `["prettier", "--parser", "typescript"]`, etc. (see
 [Shell-out mode](#shell-out-mode)).
 
+The Tier 2 built-ins (Java, C#, Ruby, C++, C, Kotlin, Swift, Scala) likewise ship
+no embedded Topiary query, so they also tidy via shell-out — e.g.
+`["clang-format"]` (C / C++), `["google-java-format", "-"]` (Java),
+`["dotnet-format", ...]` (C#), `["rubocop", "-a", "--stdin", "x.rb"]` (Ruby),
+`["ktlint", "--stdin"]` (Kotlin), `["swift-format"]` (Swift), `["scalafmt", "--stdin"]`
+(Scala).
+
 ### Maintenance
 
 `topiary-core` and `ast-grep-core` both link the native `tree-sitter` library,
