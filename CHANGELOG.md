@@ -23,10 +23,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   declare a `when: tests|comments|imports` gate; the same CLI/config flags
   activate it regardless of language.
 
+### Changed
+
+- All per-language config is consolidated under `[languages.<lang>]`. The
+  separate `[customLanguages.<lang>]` (dynamic grammars) and `[rules.<lang>]`
+  (rule extend/override) tables are gone; their fields (`libraryPath`,
+  `languageSymbol`, `metaVarChar`, `expandoChar`, `extensions`, `rules`,
+  `extend`, `override`) now live directly in `[languages.<lang>]` alongside
+  `include`. Breaking config change: a `libraryPath` marks the entry as a
+  dynamic grammar; `extend` / `override` point any language at a user rule file.
+
 ### Removed
 
 - `--include-tests`, `--include-comments`, `--no-imports` (replaced by the new
   ordered `--include`/`--exclude` interface).
+- `[customLanguages]` and `[rules]` top-level config tables (merged into
+  `[languages.<lang>]`).
 
 ## [0.1.0] - 2026-06-01
 

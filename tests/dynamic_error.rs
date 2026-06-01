@@ -15,7 +15,7 @@ fn missing_library_is_actionable_not_a_panic() {
     let tmp = tempfile::tempdir().expect("tempdir");
     fs::write(
         tmp.path().join("contasty.toml"),
-        "[customLanguages.jsonc]\n\
+        "[languages.jsonc]\n\
          libraryPath = \"does-not-exist.so\"\n\
          languageSymbol = \"tree_sitter_json\"\n\
          extensions = [\"jsonc\"]\n\

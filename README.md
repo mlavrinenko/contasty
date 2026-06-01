@@ -103,10 +103,10 @@ so a language is data, not code.
   logic in Rust.
 - Dynamic grammar: for a language ast-grep does not bundle, supply a compiled
   native tree-sitter grammar (`.so`) plus a rule file and register it under
-  `[customLanguages]` in `contasty.toml` — no rebuild.
-- Extend / override: point an existing language at a user rule file from
-  `[rules.<lang>]` to append to (`extend`) or replace (`override`) its embedded
-  rules.
+  `[languages.<lang>]` with a `libraryPath` in `contasty.toml` — no rebuild.
+- Extend / override: point an existing language at a user rule file with the
+  `extend` / `override` key of its `[languages.<lang>]` entry to append to
+  (`extend`) or replace (`override`) its embedded rules.
 
 The rule file format, dynamic `.so` grammars, JSON Schema, and editor
 integration are documented in [docs/languages.md](docs/languages.md); rule

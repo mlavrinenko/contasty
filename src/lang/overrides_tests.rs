@@ -6,13 +6,13 @@ const STRUCT_RULE: &str =
     "language: rust\nrules:\n  - action: delete\n    rule:\n      kind: struct_item\n";
 const SRC_STRUCT_FN: &str = "struct Foo { x: i32 }\nfn add(a: i32, b: i32) -> i32 { a + b }\n";
 
-/// A `Config` whose only content is one `[rules.<lang>]` entry, rooted at `dir`
-/// so relative rule-file paths resolve against the temp directory.
-fn config_with_rule(dir: &Path, lang: &str, entry: RuleOverride) -> Config {
-    let mut rules = HashMap::new();
-    rules.insert(lang.to_owned(), entry);
+/// A `Config` whose only content is one `[languages.<lang>]` entry, rooted at
+/// `dir` so relative rule-file paths resolve against the temp directory.
+fn config_with_rule(dir: &Path, lang: &str, entry: LangConfig) -> Config {
+    let mut languages = HashMap::new();
+    languages.insert(lang.to_owned(), entry);
     Config {
-        rules,
+        languages,
         base: dir.to_path_buf(),
         ..Config::default()
     }
@@ -39,9 +39,9 @@ fn extend_adds_a_rule_and_keeps_builtins() {
     let config = config_with_rule(
         dir.path(),
         "rust",
-        RuleOverride {
+        LangConfig {
             extend: Some("extra.yml".into()),
-            r#override: None,
+            ..LangConfig::default()
         },
     );
     let reg = Registry::with_config(&config).expect("registry");
@@ -65,9 +65,9 @@ fn override_replaces_the_whole_set() {
     let config = config_with_rule(
         dir.path(),
         "rust",
-        RuleOverride {
-            extend: None,
+        LangConfig {
             r#override: Some("only.yml".into()),
+            ..LangConfig::default()
         },
     );
     let reg = Registry::with_config(&config).expect("registry");
@@ -89,9 +89,10 @@ fn both_extend_and_override_is_an_error() {
     let config = config_with_rule(
         dir.path(),
         "rust",
-        RuleOverride {
+        LangConfig {
             extend: Some("a.yml".into()),
             r#override: Some("b.yml".into()),
+            ..LangConfig::default()
         },
     );
     let Err(err) = Registry::with_config(&config) else {
@@ -114,9 +115,9 @@ fn extend_file_language_must_match_table_key() {
     let config = config_with_rule(
         dir.path(),
         "rust",
-        RuleOverride {
+        LangConfig {
             extend: Some("wrong.yml".into()),
-            r#override: None,
+            ..LangConfig::default()
         },
     );
     let Err(err) = Registry::with_config(&config) else {
@@ -134,9 +135,9 @@ fn unknown_language_in_rules_table_is_an_error() {
     let config = config_with_rule(
         dir.path(),
         "python",
-        RuleOverride {
+        LangConfig {
             extend: Some("x.yml".into()),
-            r#override: None,
+            ..LangConfig::default()
         },
     );
     let Err(err) = Registry::with_config(&config) else {

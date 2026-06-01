@@ -2,15 +2,15 @@
 
 Every language — built-in or dynamic — ships one embedded rule set
 (`src/lang/rules/<lang>.yml`). To change how a language is stripped without
-rebuilding contasty, point it at a user rule file from `contasty.toml` under
-`[rules.<lang>]`. Two mutually exclusive modes:
+rebuilding contasty, point it at a user rule file with the `extend` / `override`
+key of its `[languages.<lang>]` entry. The two keys are mutually exclusive:
 
 ```toml
-[rules.rust]
+[languages.rust]
 # Append these rules to the embedded rust.yml set.
 extend = "rules/rust-extra.yml"
 
-[rules.php]
+[languages.php]
 # Ignore the embedded php.yml; use only this file.
 override = "rules/php-custom.yml"
 ```
@@ -19,14 +19,16 @@ override = "rules/php-custom.yml"
   embedded set. User rules run after the built-ins.
 - `override` — skip the embedded rules entirely; the user file is the whole set
   for that language.
-- Exactly one of `extend` / `override` per entry. Setting both (or neither) is a
-  config error, not a silent precedence rule.
+- At most one of `extend` / `override` per entry; neither is fine (the entry then
+  only tunes `include` or registers a grammar). Setting both is a config error,
+  not a silent precedence rule.
 
 The `<lang>` table key is the language name (`rust`, `php`, or a custom grammar's
 name). The user file is an ordinary rule file (same format and schema as a
 built-in's, see [languages.md](languages.md)); its `language:` is required and
 must name the same language as the table key. Paths resolve against the config
-file's directory, like `libraryPath` / `rules` under `[customLanguages]`.
+file's directory, like `libraryPath` / `rules` in the same `[languages.<lang>]`
+entry.
 
 ## Precedence
 
@@ -39,6 +41,6 @@ use `override`, not `extend`.
 
 ## Dynamic grammars
 
-The modes apply equally to a dynamic grammar (`[customLanguages]`, see
-[languages.md](languages.md)): `override` swaps the rule file declared there for
-the one named under `[rules.<lang>]`, and `extend` appends to it.
+The modes apply equally to a dynamic grammar (a `[languages.<lang>]` entry with a
+`libraryPath`, see [languages.md](languages.md)): `override` swaps the grammar's
+declared `rules` file for the `override` file, and `extend` appends to it.

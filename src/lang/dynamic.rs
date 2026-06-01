@@ -2,8 +2,8 @@
 //!
 //! The 28 grammars `ast-grep` bundles cover the common case with zero `.so`.
 //! For anything it does not ship, a user drops a compiled grammar plus a rule
-//! file, registers it under `[customLanguages]`, and contasty strips matching
-//! files with no rebuild.
+//! file, registers it under `[languages.<lang>]` with a `libraryPath`, and
+//! contasty strips matching files with no rebuild.
 //!
 //! [`Lang`] unifies a built-in [`SupportLang`] and a registered [`DynamicLang`]
 //! behind one type the rest of the engine speaks, so the parse/match/splice
@@ -20,7 +20,7 @@ use ast_grep_dynamic::{CustomLang, DynamicLang, LibraryPath};
 use ast_grep_language::{Language, LanguageExt, SupportLang};
 
 use crate::AppError;
-use crate::config::{self, CustomLanguage};
+use crate::config::{self, LangConfig};
 
 /// A language the engine can strip: an `ast-grep` built-in or a dynamically
 /// loaded grammar. Both halves are `Copy` handles into process-global tables,
@@ -122,23 +122,34 @@ impl FromStr for Lang {
 /// [`AppError::CustomLang`] if a library is missing, exposes the wrong symbol,
 /// or was built for an incompatible tree-sitter / target — surfaced as an
 /// actionable message rather than a panic.
-pub fn register(base: &Path, custom: &HashMap<String, CustomLanguage>) -> Result<(), AppError> {
-    let langs: HashMap<String, CustomLang> = custom
+pub fn register(base: &Path, languages: &HashMap<String, LangConfig>) -> Result<(), AppError> {
+    let langs: HashMap<String, CustomLang> = languages
         .iter()
-        .filter(|(name, _)| DynamicLang::from_str(name).is_err())
-        .map(|(name, cfg)| (name.clone(), to_custom_lang(cfg)))
-        .collect();
+        .filter(|(name, cfg)| cfg.is_dynamic() && DynamicLang::from_str(name).is_err())
+        .map(|(name, cfg)| to_custom_lang(name, cfg).map(|lang| (name.clone(), lang)))
+        .collect::<Result<_, AppError>>()?;
     if langs.is_empty() {
         return Ok(());
     }
     CustomLang::register(base, langs).map_err(|err| AppError::CustomLang(err.to_string()))
 }
 
-/// Lower a contasty [`CustomLanguage`] onto the `ast_grep_dynamic::CustomLang`
-/// the registry consumes, dropping the contasty-only `rules` pointer.
-fn to_custom_lang(cfg: &CustomLanguage) -> CustomLang {
-    CustomLang {
-        library_path: match &cfg.library_path {
+/// Lower a custom-grammar [`LangConfig`] onto the `ast_grep_dynamic::CustomLang`
+/// the registry consumes, dropping the contasty-only rule fields. Called only
+/// for entries with `library_path` set; a missing `extensions` list is a hard
+/// error since a grammar with no claimed extensions can never match a file.
+fn to_custom_lang(name: &str, cfg: &LangConfig) -> Result<CustomLang, AppError> {
+    let library_path = cfg
+        .library_path
+        .as_ref()
+        .expect("register filters to dynamic entries");
+    if cfg.extensions.is_empty() {
+        return Err(AppError::CustomLang(format!(
+            "languages.{name}: custom grammar needs a non-empty `extensions` list"
+        )));
+    }
+    Ok(CustomLang {
+        library_path: match library_path {
             config::LibraryPath::Single(path) => LibraryPath::Single(path.clone()),
             config::LibraryPath::Platform(map) => LibraryPath::Platform(map.clone()),
         },
@@ -146,5 +157,5 @@ fn to_custom_lang(cfg: &CustomLanguage) -> CustomLang {
         meta_var_char: cfg.meta_var_char,
         expando_char: cfg.expando_char,
         extensions: cfg.extensions.clone(),
-    }
+    })
 }

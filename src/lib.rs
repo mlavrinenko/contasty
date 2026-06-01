@@ -45,9 +45,9 @@ pub enum AppError {
     #[error("custom language: {0}")]
     CustomLang(String),
 
-    /// A `[rules.<lang>]` config entry is invalid: both/neither mode key set,
-    /// names a language with no registered rules, an unreadable rule file, or a
-    /// rule file whose `language:` disagrees with the table key.
+    /// A `[languages.<lang>]` rule-override is invalid: both `extend` and
+    /// `override` set, names a language with no registered rules, an unreadable
+    /// rule file, or a rule file whose `language:` disagrees with the table key.
     #[error("config: {0}")]
     Config(String),
 

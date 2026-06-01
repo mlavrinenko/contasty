@@ -15,6 +15,31 @@
 # [languages.rust.include]
 # comments = true    # keep doc comments for Rust only
 
+# All per-language config lives under [languages.<lang>]: category inclusion,
+# plus (optionally) a dynamic grammar and a rule extend/override. Built-in
+# languages (rust, php) need none of the grammar/rule fields.
+#
+# Dynamic grammar — for a language ast-grep does not bundle. A `libraryPath`
+# marks the entry as a custom grammar; `extensions` and `rules` are required.
+# See docs/languages.md.
+#
+# [languages.jsonc]
+# libraryPath = "grammars/jsonc.so"   # or a per-target-triple map (see docs)
+# extensions  = ["jsonc"]
+# rules       = "rules/jsonc.yml"
+#
+#   [languages.jsonc.include]
+#   tests = true
+#
+# Rule extend/override — point any language at a user rule file (see
+# docs/custom-rules.md). At most one of `extend` / `override` per entry.
+#
+# [languages.rust]
+# extend = "rules/rust-extra.yml"     # append to the embedded rust.yml
+#
+# [languages.php]
+# override = "rules/php-custom.yml"   # replace the embedded php.yml
+
 [compact]
 # Minimum byte-length of a value expression that qualifies for elision.
 # Small definitions (like `pub const MAX: usize = 42;`) are kept intact

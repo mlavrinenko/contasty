@@ -22,7 +22,7 @@ fn scaffold(dir: &Path) {
     fs::copy(FIXTURE_SO, dir.join("json-linux.so")).expect("copy fixture grammar");
     fs::write(
         dir.join("contasty.toml"),
-        "[customLanguages.jsonc]\n\
+        "[languages.jsonc]\n\
          libraryPath = \"json-linux.so\"\n\
          languageSymbol = \"tree_sitter_json\"\n\
          extensions = [\"jsonc\"]\n\

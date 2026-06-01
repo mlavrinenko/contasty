@@ -37,12 +37,73 @@ impl CategorySelection {
     }
 }
 
-/// Per-language configuration block, currently just inclusion overrides.
+/// Per-language configuration block, keyed by language name. Carries category
+/// inclusion overrides, plus the optional dynamic-grammar registration and
+/// rule-override fields. Built-in languages (rust, php) leave every grammar and
+/// rule field `None` / empty and use only `include`. Setting `library_path`
+/// marks the entry as a custom grammar; `extend` / `override` point any language
+/// at a user rule file. Relative `library_path` / `rules` / `extend` /
+/// `override` paths resolve against [`Config::base`].
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LangConfig {
+    /// Category inclusion overrides for this language.
     #[serde(default)]
     pub include: CategorySelection,
+    /// Compiled grammar for a dynamic language: one shared library, or a
+    /// per-target-triple map (native libraries are not portable across OS/arch).
+    /// `Some` marks this entry as a custom grammar to register.
+    #[serde(default)]
+    pub library_path: Option<LibraryPath>,
+    /// Dylib symbol exposing the parser. Defaults to `tree_sitter_<key>`.
+    #[serde(default)]
+    pub language_symbol: Option<String>,
+    /// Metavariable sigil for patterns. Defaults to `$`.
+    #[serde(default)]
+    pub meta_var_char: Option<char>,
+    /// Identifier-safe replacement for grammars that reject `$`.
+    #[serde(default)]
+    pub expando_char: Option<char>,
+    /// File extensions (no dot) a custom grammar claims. Required (non-empty)
+    /// when `library_path` is set; unused for built-ins.
+    #[serde(default)]
+    pub extensions: Vec<String>,
+    /// Path to the `rules/<lang>.yml` rule file driving a custom grammar's strip
+    /// pass. Required when `library_path` is set; ignored for built-ins.
+    #[serde(default)]
+    pub rules: Option<PathBuf>,
+    /// Append this file's rules to the language's set (extend mode). The user
+    /// rules run after the existing set (matters only for splice precedence).
+    #[serde(default)]
+    pub extend: Option<PathBuf>,
+    /// Replace the language's rules with this file outright (override mode).
+    #[serde(default, rename = "override")]
+    pub r#override: Option<PathBuf>,
+}
+
+impl LangConfig {
+    /// True when this entry registers a dynamic grammar (`library_path` set).
+    #[must_use]
+    pub const fn is_dynamic(&self) -> bool {
+        self.library_path.is_some()
+    }
+
+    /// Resolve the rule-override mode for this entry. `Ok(None)` when neither
+    /// `extend` nor `override` is set (the entry only tunes inclusion or
+    /// registers a grammar). `Err` (with an actionable message) when both are
+    /// set — ambiguity is surfaced, not silently resolved.
+    ///
+    /// # Errors
+    ///
+    /// A human-readable reason the entry sets both mode keys.
+    pub fn rule_source(&self) -> Result<Option<RuleSource<'_>>, String> {
+        match (&self.extend, &self.r#override) {
+            (Some(_), Some(_)) => Err("set both `extend` and `override`; choose one".to_owned()),
+            (Some(path), None) => Ok(Some(RuleSource::Extend(path))),
+            (None, Some(path)) => Ok(Some(RuleSource::Override(path))),
+            (None, None) => Ok(None),
+        }
+    }
 }
 
 /// Concrete per-file drop flags after all layers are resolved.
@@ -61,90 +122,24 @@ pub struct Config {
     /// `None` until set, falling back to the built-in defaults.
     #[serde(default)]
     pub include: CategorySelection,
-    /// Per-language settings keyed by language name (e.g. `"rust"`, `"php"`).
-    /// Each entry may override category inclusion for that language.
+    /// Per-language settings keyed by language name (e.g. `"rust"`, `"php"`, or
+    /// a custom grammar's name). Each entry may override category inclusion,
+    /// register a dynamic grammar, and/or extend/override the language's rules.
     #[serde(default)]
     pub languages: HashMap<String, LangConfig>,
-    /// User-supplied dynamic tree-sitter grammars, keyed by language name. The
-    /// key is the language identifier a rule file's `language:` must name and
-    /// the dylib symbol defaults to `tree_sitter_<key>`.
-    #[serde(default, rename = "customLanguages")]
-    pub custom_languages: HashMap<String, CustomLanguage>,
-    /// Per-language rule overrides, keyed by language name (the table key). Each
-    /// entry either extends or replaces that language's embedded rules with a
-    /// user file. Paths resolve against [`Config::base`], like `customLanguages`.
-    #[serde(default)]
-    pub rules: HashMap<String, RuleOverride>,
-    /// Directory the config file lives in. Relative `library_path` / `rules`
-    /// paths resolve against it. Set by [`Config::load`], never deserialized.
+    /// Directory the config file lives in. Relative `library_path` / `rules` /
+    /// `extend` / `override` paths resolve against it. Set by [`Config::load`],
+    /// never deserialized.
     #[serde(skip)]
     pub base: PathBuf,
 }
 
-/// One `[rules.<lang>]` entry: point a built-in (or dynamic) language at a user
-/// rule file that either extends or replaces its standard rules. Exactly one of
-/// `extend` / `override` must be set — both (or neither) is a config error,
-/// surfaced rather than silently resolved.
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RuleOverride {
-    /// Append this file's rules to the language's embedded set. The user rules
-    /// run after the built-ins (matters only for splice precedence).
-    #[serde(default)]
-    pub extend: Option<PathBuf>,
-    /// Ignore the embedded rules; this file is the whole set for the language.
-    #[serde(default, rename = "override")]
-    pub r#override: Option<PathBuf>,
-}
-
-/// Resolved mode of a [`RuleOverride`]: which file, applied which way.
+/// Resolved rule-override mode of a [`LangConfig`]: which file, applied how.
 pub enum RuleSource<'a> {
-    /// Append the file's rules to the embedded set.
+    /// Append the file's rules to the language's set.
     Extend(&'a Path),
-    /// Replace the embedded set with the file's rules.
+    /// Replace the language's set with the file's rules.
     Override(&'a Path),
-}
-
-impl RuleOverride {
-    /// Resolve the single mode key. `Err` (with an actionable message) when both
-    /// or neither of `extend` / `override` is set.
-    ///
-    /// # Errors
-    ///
-    /// A human-readable reason the entry is ambiguous or empty.
-    pub fn source(&self) -> Result<RuleSource<'_>, String> {
-        match (&self.extend, &self.r#override) {
-            (Some(_), Some(_)) => Err("set both `extend` and `override`; choose one".to_owned()),
-            (Some(path), None) => Ok(RuleSource::Extend(path)),
-            (None, Some(path)) => Ok(RuleSource::Override(path)),
-            (None, None) => Err("set neither `extend` nor `override`".to_owned()),
-        }
-    }
-}
-
-/// One entry of the `[customLanguages]` table: an `ast-grep-dynamic` grammar
-/// plus the contasty rule file driving its strip pass. Field names mirror
-/// `ast_grep_dynamic::CustomLang` so a config carries straight over, with the
-/// extra `rules` pointer contasty needs.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct CustomLanguage {
-    /// Compiled grammar: one shared library, or a per-target-triple map (native
-    /// libraries are not portable across OS/arch).
-    pub library_path: LibraryPath,
-    /// Dylib symbol exposing the parser. Defaults to `tree_sitter_<key>`.
-    #[serde(default)]
-    pub language_symbol: Option<String>,
-    /// Metavariable sigil for patterns. Defaults to `$`.
-    #[serde(default)]
-    pub meta_var_char: Option<char>,
-    /// Identifier-safe replacement for grammars that reject `$`.
-    #[serde(default)]
-    pub expando_char: Option<char>,
-    /// File extensions (no dot) this grammar claims.
-    pub extensions: Vec<String>,
-    /// Path to the `rules/<lang>.yml` rule file, relative to the config file.
-    pub rules: PathBuf,
 }
 
 /// Where a custom grammar's shared library lives. Mirrors
@@ -373,5 +368,50 @@ imports = false\n";
             config.languages.get("php").map(|l| l.include.imports),
             Some(Some(false))
         );
+    }
+
+    #[test]
+    fn language_block_parses_grammar_and_rule_fields() {
+        let toml = "\
+[languages.jsonc]\n\
+libraryPath = \"grammars/jsonc.so\"\n\
+languageSymbol = \"tree_sitter_json\"\n\
+extensions = [\"jsonc\"]\n\
+rules = \"rules/jsonc.yml\"\n\
+extend = \"rules/jsonc-extra.yml\"\n\
+[languages.jsonc.include]\n\
+tests = true\n";
+        let config: Config = toml::from_str(toml).expect("parse");
+        let jsonc = config.languages.get("jsonc").expect("jsonc entry");
+        assert!(jsonc.is_dynamic(), "libraryPath marks a dynamic grammar");
+        assert_eq!(jsonc.language_symbol.as_deref(), Some("tree_sitter_json"));
+        assert_eq!(jsonc.extensions, vec!["jsonc".to_owned()]);
+        assert_eq!(jsonc.rules.as_deref(), Some(Path::new("rules/jsonc.yml")));
+        assert_eq!(jsonc.include.tests, Some(true));
+        assert!(
+            matches!(jsonc.rule_source(), Ok(Some(RuleSource::Extend(_)))),
+            "extend resolves to a rule source"
+        );
+    }
+
+    #[test]
+    fn builtin_language_block_is_not_dynamic() {
+        let config: Config =
+            toml::from_str("[languages.rust.include]\ncomments = true\n").expect("parse");
+        let rust = config.languages.get("rust").expect("rust entry");
+        assert!(!rust.is_dynamic(), "no libraryPath: not a grammar");
+        assert!(
+            matches!(rust.rule_source(), Ok(None)),
+            "no extend/override: no rule source"
+        );
+    }
+
+    #[test]
+    fn both_extend_and_override_is_a_rule_source_error() {
+        let config: Config =
+            toml::from_str("[languages.rust]\nextend = \"a.yml\"\noverride = \"b.yml\"\n")
+                .expect("parse");
+        let rust = config.languages.get("rust").expect("rust entry");
+        assert!(rust.rule_source().is_err(), "both keys rejected");
     }
 }

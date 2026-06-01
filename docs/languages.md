@@ -36,19 +36,19 @@ are not portable):
 tree-sitter build --output mylang.so   # run in the grammar repo
 ```
 
-Register it under `[customLanguages.<name>]`. The `<name>` key is the language
-identifier; it must match the rule file's `language:` and (unless overridden)
-fixes the dylib symbol to `tree_sitter_<name>`:
+Register it under `[languages.<name>]` with a `libraryPath` (which marks a custom
+grammar). The `<name>` key must match the rule file's `language:` and (unless
+overridden) fixes the dylib symbol to `tree_sitter_<name>`:
 
 ```toml
-[customLanguages.mylang]
+[languages.mylang]
 # One library for the current host...
 libraryPath = "grammars/mylang.so"
 extensions = ["ml", "mli"]
 rules = "rules/mylang.yml"
 
 # ...or a per-target-triple map when you ship more than one platform:
-# [customLanguages.mylang.libraryPath]
+# [languages.mylang.libraryPath]
 # "x86_64-unknown-linux-gnu" = "grammars/mylang-linux.so"
 # "aarch64-apple-darwin"     = "grammars/mylang-mac.dylib"
 
