@@ -37,33 +37,61 @@ Download a pre-built binary from the
 ## Usage
 
 ```bash
-contasty src/ > context.md        # strip a directory
-contasty src/lib.rs               # strip a single file
-contasty                          # default path is "."
-contasty --include-tests src/     # keep #[test] / #[cfg(test)] items
-contasty --include-comments src/  # keep every comment (doc comments included)
-contasty --no-imports src/        # drop every `use` declaration
-contasty --format=json src/       # emit a JSON bundle instead of Markdown
-contasty --stats src/             # print compactization statistics
-contasty --config path.toml src/  # use a specific contasty.toml
+contasty src/ > context.md             # strip a directory
+contasty src/lib.rs                    # strip a single file
+contasty                               # default path is "."
+contasty --include=comments src/       # keep comments (doc comments included)
+contasty --include=tests src/          # keep test functions and test modules
+contasty --exclude=imports src/        # drop every import / `use` declaration
+contasty --include=all src/            # keep everything (alias: --include=everything)
+contasty --exclude=all --include=comments src/   # only comments kept
+contasty --include=everything --exclude=imports  # all except imports
+contasty --format=json src/            # emit a JSON bundle instead of Markdown
+contasty --stats src/                  # print compactization statistics
+contasty --config path.toml src/       # use a specific contasty.toml
 ```
 
 Output defaults to Markdown. Pass `--format=json` for a pretty-printed JSON
 bundle shaped as `{ "base": <dir>, "files": [{ "path", "lang", "content" }] }`,
 mirroring the Markdown layout.
 
-Tests (`#[test]` functions and `#[cfg(test)]` modules) and comments (every
-`//`, `///`, `//!`, `/* */`, `/** */`, `/*! */`) are dropped from the output
-by default — both are noise for most context-bundle use cases. Pass
-`--include-tests` and/or `--include-comments` to keep them. Import lists are
-kept by default; pass `--no-imports` to shed every `use` declaration.
+Three categories control what is kept or dropped:
+
+| Category   | Default  | Selectors              |
+| ---------- | -------- | ---------------------- |
+| `comments` | excluded | `--include=comments`   |
+| `tests`    | excluded | `--include=tests`      |
+| `imports`  | included | `--exclude=imports`    |
+
+`--include` and `--exclude` are repeatable and processed left to right, so the
+last mention of a category wins. `all` (alias `everything`) applies to all
+three at once.
+
+Category gating applies to every supported language — test and import rules in
+`rust.yml` and `php.yml` (and any custom rule file) declare which category gates
+them, so the same flags work uniformly.
 
 ## Configuration
 
 Drop a `contasty.toml` in your project root to tune compaction thresholds,
-register dynamic grammars, and extend or override per-language rules. All
-fields are optional. See [docs/languages.md](docs/languages.md) and
-[docs/custom-rules.md](docs/custom-rules.md).
+set default category inclusion, register dynamic grammars, and extend or
+override per-language rules. All fields are optional. See
+[docs/languages.md](docs/languages.md) and [docs/custom-rules.md](docs/custom-rules.md).
+
+Category inclusion can be set cross-language under `[include]` and refined
+per language under `[languages.<lang>.include]`:
+
+```toml
+[include]
+comments = false   # exclude comments by default (built-in default)
+imports  = true    # include imports by default (built-in default)
+tests    = false   # exclude tests by default (built-in default)
+
+[languages.rust.include]
+comments = true    # keep doc comments for Rust only
+```
+
+CLI flags override config for all languages. Config loads first; CLI wins.
 
 ## Adding a language
 

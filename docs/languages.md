@@ -167,6 +167,10 @@ hard error, not a silently ignored rule.
 | `min-bytes`          | no       | Threshold the match must clear: `elide-min` or `max-string`.         |
 | `expand-attributes`  | no       | Absorb adjacent attribute siblings plus the decorated item.          |
 
+The `tests`, `comments`, and `imports` gates are language-agnostic: any rule
+file (built-in or custom) can use them. Whether a category is active is
+controlled by the CLI and config, not by which language is being stripped.
+
 `action` semantics:
 
 - `elide` — replace the range with `{}`.

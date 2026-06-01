@@ -51,7 +51,8 @@ fn custom_grammar_strips_via_rule_file_no_rebuild() {
     scaffold(tmp.path());
 
     let config = Config::load(Some(&tmp.path().join("contasty.toml")), tmp.path());
-    let items = contasty::collect(tmp.path(), false, false, false, &config).expect("collect");
+    let items = contasty::collect(tmp.path(), contasty::CategorySelection::default(), &config)
+        .expect("collect");
 
     let jsonc = items
         .iter()

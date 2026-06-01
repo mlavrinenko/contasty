@@ -2,6 +2,19 @@
 #
 # All fields are optional; defaults are shown below.
 
+# Category inclusion: what to keep in the stripped output.
+# Built-in defaults: comments and tests excluded, imports included.
+# Override cross-language defaults under [include], then refine per language
+# under [languages.<lang>.include].
+#
+# [include]
+# comments = false
+# imports  = true
+# tests    = false
+#
+# [languages.rust.include]
+# comments = true    # keep doc comments for Rust only
+
 [compact]
 # Minimum byte-length of a value expression that qualifies for elision.
 # Small definitions (like `pub const MAX: usize = 42;`) are kept intact

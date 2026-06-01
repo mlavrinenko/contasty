@@ -36,7 +36,7 @@ rules:
         - kind: string_literal
         - kind: raw_string_literal
 
-  # Drop every comment, doc comments included, under --include-comments off.
+  # Drop every comment, doc comments included, when comments are excluded.
   - action: delete
     when: comments
     rule:
@@ -44,7 +44,7 @@ rules:
         - kind: line_comment
         - kind: block_comment
 
-  # Drop `use` declarations under --no-imports.
+  # Drop `use` declarations when imports are excluded.
   - action: delete
     when: imports
     rule:

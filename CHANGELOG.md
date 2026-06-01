@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `--include=<SEL>` / `--exclude=<SEL>`: ordered, repeatable flags replacing
+  the old three booleans. Selectors: `comments`, `imports`, `tests`, `all`
+  (alias `everything`). Flags are processed left to right across both, so
+  `--exclude=all --include=comments` excludes all categories then re-includes
+  comments.
+- `[include]` config section: cross-language category defaults
+  (`comments`, `imports`, `tests` as booleans). Config loads first; CLI overrides
+  config globally.
+- `[languages.<lang>.include]` config sub-section: per-language category
+  overrides, applied between cross-language defaults and the CLI.
+- Category gating is language-agnostic: any rule file (built-in or custom) can
+  declare a `when: tests|comments|imports` gate; the same CLI/config flags
+  activate it regardless of language.
+
+### Removed
+
+- `--include-tests`, `--include-comments`, `--no-imports` (replaced by the new
+  ordered `--include`/`--exclude` interface).
+
 ## [0.1.0] - 2026-06-01
 
 First public release.
@@ -35,10 +56,10 @@ First public release.
   small const/static/type values intact; `max-string` gates truncation. Both
   are configurable from `contasty.toml`.
 - Test elision: `#[test]` functions and `#[cfg(test)]` modules (with adjacent
-  attributes) are dropped by default. `--include-tests` keeps them.
-- Comment elision: every comment is dropped by default. `--include-comments`
-  keeps them (doc and non-doc share the flag).
-- `--no-imports`: drop every `use` declaration (kept by default).
+  attributes) are dropped by default. `--include=tests` keeps them.
+- Comment elision: every comment is dropped by default. `--include=comments`
+  keeps them (doc and non-doc share the selector).
+- `--exclude=imports`: drop every `use` declaration (kept by default).
 - `--format=json`: emit a pretty-printed JSON bundle
   (`{ base, files: [{ path, lang, content }] }`) instead of Markdown.
 - `--stats`: print original vs compacted line counts (code, comments, blanks)
