@@ -1,0 +1,12 @@
+# Calculator config.
+name: calculator
+version: 1.0.0
+description: "this description is intentionally long enough to truncate past the configured default string limit of two hundred and fifty six bytes so the truncation marker is emitted in the golden snapshot output for the yaml fixture and here is some extra padding text"
+notes: |
+  this block scalar is intentionally long enough to truncate past the configured default string limit of two hundred and fifty six bytes so the truncation marker is emitted in the golden snapshot output for the yaml fixture and here is some extra padding text
+nested:
+  x: 1
+  y: 2
+list:
+  - one
+  - two

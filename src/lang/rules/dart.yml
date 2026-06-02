@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# Dart strip rules. Kinds are tree-sitter-dart (ast-grep's SupportLang::Dart).
+language: dart
+rules:
+  # Elide every brace body: the `block` directly under a `function_body`
+  # (functions, methods, constructors) or a `function_expression_body`
+  # (closures). Anchoring the `block` leaves expression-bodied `=> expr` members
+  # verbatim (their `function_body` has no `block` child), mirroring the C#/Swift
+  # handling.
+  - action: elide
+    rule:
+      kind: block
+      inside:
+        any:
+          - kind: function_body
+          - kind: function_expression_body
+
+  # Truncate long string literals over the size threshold. Import URIs are also
+  # `string_literal` but stay under the default threshold, and imports drop via
+  # their own rule below.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      kind: string_literal
+
+  # Drop comments (`//`, `/* */`, `///` doc comments — all the `comment` kind)
+  # when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment
+
+  # Drop `import` / `export` directives when imports are excluded.
+  - action: delete
+    when: imports
+    rule:
+      kind: import_or_export
+
+  # Drop `test` package blocks (`group` / `test` / `testWidgets` / `setUp` /
+  # `tearDown` calls) when tests are excluded. Detection is by callee name on the
+  # AST, not filename (see docs/languages.md).
+  - action: delete
+    when: tests
+    rule:
+      kind: expression_statement
+      has:
+        kind: call_expression
+        has:
+          field: function
+          regex: '^(test|group|testWidgets|setUp|tearDown)$'

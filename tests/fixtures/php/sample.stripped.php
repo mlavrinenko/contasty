@@ -5,7 +5,7 @@ namespace App\Calc;
 
 class Calculator implements Adder
 {
-        private int $total = 0;
+    private int $total = 0;
 
     public function add(int $lhs, int $rhs): int
     {}

@@ -28,8 +28,11 @@ mod dynamic;
 mod overrides;
 mod reformat;
 mod shellout;
+mod splice;
 #[cfg(feature = "topiary")]
 mod topiary;
+
+use splice::splice;
 
 type Doc = StrDoc<Lang>;
 type AstNode<'r> = ast_grep_core::Node<'r, Doc>;
@@ -386,6 +389,18 @@ impl Registry {
                 builtin("kotlin", include_str!("rules/kotlin.yml"))?,
                 builtin("swift", include_str!("rules/swift.yml"))?,
                 builtin("scala", include_str!("rules/scala.yml"))?,
+                builtin("bash", include_str!("rules/bash.yml"))?,
+                builtin("lua", include_str!("rules/lua.yml"))?,
+                builtin("dart", include_str!("rules/dart.yml"))?,
+                builtin("elixir", include_str!("rules/elixir.yml"))?,
+                builtin("haskell", include_str!("rules/haskell.yml"))?,
+                builtin("nix", include_str!("rules/nix.yml"))?,
+                builtin("solidity", include_str!("rules/solidity.yml"))?,
+                builtin("json", include_str!("rules/json.yml"))?,
+                builtin("yaml", include_str!("rules/yaml.yml"))?,
+                builtin("html", include_str!("rules/html.yml"))?,
+                builtin("css", include_str!("rules/css.yml"))?,
+                builtin("hcl", include_str!("rules/hcl.yml"))?,
             ],
         })
     }
@@ -444,59 +459,6 @@ impl Registry {
         let lang = <Lang as ast_grep_language::Language>::from_path(path)?;
         self.langs.iter().find(|registered| registered.lang == lang)
     }
-}
-
-const ELISION: &str = "{}";
-const STR_TRUNCATION: &str = "\"[…CTY]\"";
-
-fn splice(source: &str, ranges: &[(usize, usize, Action)]) -> String {
-    if ranges.is_empty() {
-        return source.to_owned();
-    }
-    let sorted = sort_ranges(ranges);
-    let mut out = String::with_capacity(source.len());
-    let mut cursor = 0_usize;
-    for &(start, end, action) in &sorted {
-        if start < cursor {
-            continue;
-        }
-        out.push_str(source.get(cursor..start).unwrap_or_default());
-        cursor = apply(action, &mut out, source, end);
-    }
-    out.push_str(source.get(cursor..).unwrap_or_default());
-    out
-}
-
-fn apply(action: Action, out: &mut String, source: &str, end: usize) -> usize {
-    match action {
-        Action::Elide => {
-            out.push_str(ELISION);
-            end
-        }
-        Action::Delete => consume_trailing_newline(source, end),
-        Action::TruncateString => {
-            out.push_str(STR_TRUNCATION);
-            end
-        }
-    }
-}
-
-fn consume_trailing_newline(source: &str, end: usize) -> usize {
-    if source.as_bytes().get(end) == Some(&b'\n') {
-        end + 1
-    } else {
-        end
-    }
-}
-
-fn sort_ranges(ranges: &[(usize, usize, Action)]) -> Vec<(usize, usize, Action)> {
-    let mut sorted: Vec<_> = ranges.to_vec();
-    // Sort by start ascending, then by end descending so a wider range that
-    // shares a start wins over a narrower one (the narrower is skipped via
-    // `start < cursor`).
-    sorted.sort_by(|left, right| left.0.cmp(&right.0).then(right.1.cmp(&left.1)));
-    sorted.dedup_by(|left, right| left.0 == right.0 && left.1 == right.1);
-    sorted
 }
 
 #[cfg(test)]

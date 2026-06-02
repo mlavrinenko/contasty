@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# HTML strip rules. Kinds are tree-sitter-html (ast-grep's SupportLang::Html).
+#
+# Markup language: the only "executable bodies" are the embedded `<script>` and
+# `<style>` payloads (a `raw_text` node), which elide to `{}`; the element shell,
+# attributes, and document structure are kept. Comments drop under the flag.
+# Documented in docs/languages.md.
+language: html
+rules:
+  - action: elide
+    rule:
+      kind: raw_text
+      inside:
+        any:
+          - kind: script_element
+          - kind: style_element
+
+  - action: delete
+    when: comments
+    rule:
+      kind: comment

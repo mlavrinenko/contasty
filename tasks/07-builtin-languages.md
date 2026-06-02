@@ -107,7 +107,29 @@ For every added language:
     Swift computed properties are kept. Test conventions differ per language
     (JUnit/NUnit/xUnit attributes, GoogleTest macros, `test_*` names, ScalaTest
     `*Spec` classes) — see the per-language table.
-- [ ] Tier 3: remaining + data/markup languages (or documented skips)
+- [x] Tier 3: remaining + data/markup languages (or documented skips)
+  - Rule files `src/lang/rules/{bash,lua,dart,elixir,haskell,nix,solidity,json,yaml,html,css,hcl}.yml`,
+    registered in `Registry::new`. Fixture pairs + golden tests
+    `tests/{bash,lua,dart,elixir,haskell,nix,solidity,json,yaml,html,css,hcl}.rs`;
+    every stripped snapshot re-parses with zero tree-sitter ERROR/MISSING nodes
+    (Bash additionally checked with `bash -n` for the empty-body case).
+  - Body elision only where the generic `{}` marker is a valid empty body: Dart
+    and Solidity (brace `function_body`) and HTML's `<script>`/`<style>`
+    `raw_text`. The non-brace programming languages (Bash, Lua, Elixir, Haskell,
+    Nix) keep bodies — `{}` is invalid/ambiguous in a body slot there — and strip
+    comments, imports, and long strings. Documented in `docs/languages.md`.
+  - Data/markup: JSON, YAML, CSS, HCL, HTML are stripping-capable (string/scalar
+    truncation, comment dropping, HTML script/style elision); keys, structure,
+    selectors, and block labels stay. Markdown is intentionally structural-only
+    and ships no rule file (prose is the context the tool exists to pass along).
+  - Tech-debt cleanup: `delete` now takes the deleted node's indentation with it
+    when the node is alone on its line, so an indented import/comment/test leaves
+    no blank stub (`line_indent_start` in `src/lang/mod.rs`, regression tests in
+    `mod_tests.rs`). This also tidied four existing Tier 1/2 goldens (cpp, csharp,
+    java, php) that had captured the stray indentation. Added dev examples
+    `examples/dump-ast.rs` (version-accurate node-kind dumper) and
+    `examples/strip.rs` (eyeball stripped output), referenced from
+    `docs/languages.md`.
 
 ## Open questions
 

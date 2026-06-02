@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# JSON strip rules. Kinds are tree-sitter-json (ast-grep's SupportLang::Json).
+#
+# Data language: no executable body to elide. Stripping truncates long string
+# *values* (a `string` that is the `value` field of a `pair`), leaving keys,
+# numbers, and structure intact so the output stays valid JSON. Documented in
+# docs/languages.md.
+language: json
+rules:
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      kind: string
+      inside:
+        kind: pair
+        field: value

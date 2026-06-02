@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# Nix strip rules. Kinds are tree-sitter-nix (ast-grep's SupportLang::Nix).
+#
+# No body elision: Nix is one expression: a "function" is a `function_expression`
+# (lambda) whose body is just the rest of the expression, with no brace-delimited
+# block to swap for `{}` without changing meaning (`{}` is the empty attrset).
+# Stripping is comments plus long-string truncation. Documented in
+# docs/languages.md.
+language: nix
+rules:
+  # Truncate long string literals over the size threshold. `string_expression`
+  # is the `"..."` form, `indented_string_expression` the `''...''` form.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      any:
+        - kind: string_expression
+        - kind: indented_string_expression
+
+  # Drop every comment (`#`, `/* */`) when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment

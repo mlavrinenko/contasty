@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# Elixir strip rules. Kinds are tree-sitter-elixir (ast-grep's
+# SupportLang::Elixir).
+#
+# No body elision: every Elixir construct is a `call` macro (`def`, `defmodule`,
+# ...) whose body is a `do_block` (`do ... end`); the generic `{}` marker is an
+# empty tuple, semantically wrong in a body slot, so bodies are left intact.
+# Stripping is comments, imports, tests, and long-string truncation. Imports and
+# tests are themselves macro calls matched by callee name. Documented in
+# docs/languages.md.
+language: elixir
+rules:
+  # Truncate long string literals over the size threshold.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      kind: string
+
+  # Drop every comment (`#`) when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment
+
+  # Drop module-directive calls (`import` / `alias` / `require` / `use`) when
+  # imports are excluded — the callee is the leading `identifier`.
+  - action: delete
+    when: imports
+    rule:
+      kind: call
+      has:
+        field: target
+        regex: '^(import|alias|require|use)$'
+
+  # Drop ExUnit test blocks (`test "..." do` / `describe "..." do`) when tests
+  # are excluded.
+  - action: delete
+    when: tests
+    rule:
+      kind: call
+      has:
+        field: target
+        regex: '^(test|describe)$'

@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# Haskell strip rules. Kinds are tree-sitter-haskell (ast-grep's
+# SupportLang::Haskell).
+#
+# No body elision: a Haskell binding's right-hand side is an expression (`= ...`,
+# guards, `where`), not a brace-delimited block, so the generic `{}` marker has
+# no valid slot. Type signatures are kept; stripping is comments, imports, and
+# long-string truncation. Documented in docs/languages.md.
+language: haskell
+rules:
+  # Truncate long string literals over the size threshold.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      kind: string
+
+  # Drop every comment (`--`, `{- -}`) when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment
+
+  # Drop `import` declarations when imports are excluded.
+  - action: delete
+    when: imports
+    rule:
+      kind: import

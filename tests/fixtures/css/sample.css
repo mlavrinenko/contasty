@@ -1,0 +1,6 @@
+/* Button styles. */
+.btn {
+  color: red;
+  margin: 0;
+  content: "this content string is intentionally long enough to truncate past the configured default string limit of two hundred and fifty six bytes so the truncation marker is emitted in the golden snapshot output for the css fixture plus padding appended to comfortably exceed the limit";
+}

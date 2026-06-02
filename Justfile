@@ -20,6 +20,14 @@ check:
 gen-schema:
     cargo run -q --example gen-schema
 
+# Dump a file's named-node tree (kinds + fields) at contasty's pinned grammar version
+dump-ast LANG FILE:
+    cargo run -q --example dump-ast -- {{ LANG }} {{ FILE }}
+
+# Strip a file and print the raw result (optional max-string byte threshold)
+strip FILE *ARGS:
+    cargo run -q --example strip -- {{ FILE }} {{ ARGS }}
+
 # Run tests only
 test *ARGS:
     cargo test --workspace {{ ARGS }}

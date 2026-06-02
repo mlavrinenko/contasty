@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# Solidity strip rules. Kinds are tree-sitter-solidity (ast-grep's
+# SupportLang::Solidity).
+language: solidity
+rules:
+  # Elide every function / constructor / modifier body (a `function_body`,
+  # i.e. `{ ... }` → `{}`). State-variable initializers are kept (no brace value
+  # literal to swap for the generic `{}` marker).
+  - action: elide
+    field: body
+    rule:
+      any:
+        - kind: function_definition
+        - kind: constructor_definition
+        - kind: modifier_definition
+
+  # Truncate long string literals over the size threshold. Import paths are also
+  # `string` but stay under the default threshold, and imports drop via their own
+  # rule below.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      kind: string
+
+  # Drop comments (`//`, `/* */`) when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment
+
+  # Drop `import` directives when imports are excluded.
+  - action: delete
+    when: imports
+    rule:
+      kind: import_directive
+
+  # Drop Foundry-style test functions (a `function_definition` whose name starts
+  # with `test`) when tests are excluded. Detection is by name on the AST, not
+  # filename (see docs/languages.md).
+  - action: delete
+    when: tests
+    rule:
+      kind: function_definition
+      has:
+        field: name
+        regex: '^test'

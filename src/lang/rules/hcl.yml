@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# HCL / Terraform strip rules. Kinds are tree-sitter-hcl (ast-grep's
+# SupportLang::Hcl).
+#
+# Config language: no executable body to elide. Stripping truncates long string
+# values and drops comments; block structure, labels, and attribute names are
+# kept. Block labels are also `string_lit` but stay under the default threshold.
+# Documented in docs/languages.md.
+language: hcl
+rules:
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      kind: string_lit
+
+  - action: delete
+    when: comments
+    rule:
+      kind: comment

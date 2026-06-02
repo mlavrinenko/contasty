@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# CSS strip rules. Kinds are tree-sitter-css (ast-grep's SupportLang::Css).
+#
+# Markup language: no executable body to elide. Stripping truncates long string
+# values (`content`, `url(...)` payloads, ...) and drops comments; selectors,
+# properties, and structure are kept. Documented in docs/languages.md.
+language: css
+rules:
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      kind: string_value
+
+  - action: delete
+    when: comments
+    rule:
+      kind: comment

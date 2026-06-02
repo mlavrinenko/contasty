@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# YAML strip rules. Kinds are tree-sitter-yaml (ast-grep's SupportLang::Yaml).
+#
+# Data language: no executable body to elide. Stripping truncates long quoted and
+# block scalars and drops comments. Plain scalars are left intact (a key and its
+# value are both `plain_scalar`, so truncating them risks clobbering a mapping
+# key); quoted/block scalars are unambiguously values. Documented in
+# docs/languages.md.
+language: yaml
+rules:
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      any:
+        - kind: block_scalar
+        - kind: double_quote_scalar
+        - kind: single_quote_scalar
+
+  - action: delete
+    when: comments
+    rule:
+      kind: comment

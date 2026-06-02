@@ -9,7 +9,7 @@ public:
 
     int add(int a, int b) {}
 
-        int total_value() const {}
+    int total_value() const {}
 };
 
 const std::vector<int> Calculator::kSeeds = {};

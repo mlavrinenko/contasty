@@ -69,6 +69,14 @@ no embedded Topiary query, so they also tidy via shell-out — e.g.
 `["ktlint", "--stdin"]` (Kotlin), `["swift-format"]` (Swift), `["scalafmt", "--stdin"]`
 (Scala).
 
+The Tier 3 built-ins (Bash, Lua, Dart, Elixir, Haskell, Nix, Solidity, and the
+data/markup grammars JSON, YAML, HTML, CSS, HCL) ship no embedded Topiary query
+either. Tidy via shell-out — e.g. `["shfmt"]` (Bash), `["stylua", "-"]` (Lua),
+`["dart", "format"]` (Dart), `["mix", "format", "-"]` (Elixir),
+`["ormolu"]` (Haskell), `["nixfmt"]` (Nix), `["forge", "fmt", "--raw", "-"]`
+(Solidity), `["prettier", "--parser", "json"]` / `yaml` / `html` / `css` (the
+data/markup set), `["terraform", "fmt", "-"]` (HCL).
+
 ### Maintenance
 
 `topiary-core` and `ast-grep-core` both link the native `tree-sitter` library,

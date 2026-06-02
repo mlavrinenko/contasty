@@ -18,7 +18,9 @@ paste into an LLM context window.
 
 Each language is driven by a YAML rule file matched against the AST, not by
 hardcoded per-language logic. Built-in support: Rust, PHP, TypeScript, TSX,
-JavaScript, Python, Go, Java, C#, Ruby, C++, C, Kotlin, Swift, and Scala. You can
+JavaScript, Python, Go, Java, C#, Ruby, C++, C, Kotlin, Swift, Scala, Bash, Lua,
+Dart, Elixir, Haskell, Nix, Solidity, JSON, YAML, HTML, CSS, and HCL — every
+grammar ast-grep bundles except Markdown (prose, nothing to strip). You can
 add a language with a dynamic tree-sitter grammar, and extend or override any
 language's rules from `contasty.toml` — both
 without rebuilding contasty.

@@ -9,7 +9,7 @@ public abstract class Calculator {
 
     public int add(int a, int b) {}
 
-        public int apply(IntBinaryOperator op, int a, int b) {}
+    public int apply(IntBinaryOperator op, int a, int b) {}
 
     public abstract int describe();
 }

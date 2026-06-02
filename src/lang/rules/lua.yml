@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# Lua strip rules. Kinds are tree-sitter-lua (ast-grep's SupportLang::Lua).
+#
+# No function-body elision: a Lua body is a bare `block` (no surrounding braces)
+# and the generic `{}` marker is a table constructor, not a valid statement, so
+# splicing it where a body was breaks the parse. Bodies are left intact;
+# stripping is comments plus long-string truncation. Documented in
+# docs/languages.md.
+language: lua
+rules:
+  # Truncate long string literals over the size threshold (quoted and long-
+  # bracket forms are both `string`).
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      kind: string
+
+  # Drop every comment (`--`, `--[[ ]]`) when comments are excluded.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment

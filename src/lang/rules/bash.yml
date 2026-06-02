@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
+# Bash strip rules. Kinds are tree-sitter-bash (ast-grep's SupportLang::Bash).
+#
+# No function-body elision: a Bash function body is a `compound_statement`
+# (`{ ... }`) and the generic `{}` marker is not a valid empty body — `foo() {}`
+# is rejected by `bash -n` (it needs at least one command, e.g. `{ :; }`). Bodies
+# are left intact; stripping is comments plus long-string truncation. Documented
+# in docs/languages.md.
+language: bash
+rules:
+  # Truncate long string literals over the size threshold. `string` is the
+  # double-quoted form, `raw_string` the single-quoted one.
+  - action: truncate
+    min-bytes: max-string
+    rule:
+      any:
+        - kind: string
+        - kind: raw_string
+
+  # Drop every comment (`#`) when comments are excluded. The shebang is also a
+  # `comment`, so it goes with the rest under the flag.
+  - action: delete
+    when: comments
+    rule:
+      kind: comment

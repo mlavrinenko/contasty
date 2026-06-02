@@ -10,7 +10,7 @@ public class Calculator {
 
     public int Add(int a, int b) {}
 
-        public int Total {
+    public int Total {
         get {}
     }
 

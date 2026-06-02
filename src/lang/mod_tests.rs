@@ -40,6 +40,24 @@ fn splice_delete_action_removes_range_and_trailing_newline() {
 }
 
 #[test]
+fn splice_delete_takes_the_indented_line_with_it() {
+    // An indented node alone on its line drops with its leading whitespace, so
+    // no blank stub is left behind (the splicer's `line_indent_start` path).
+    let src = "fn f() {\n    // note\n    keep();\n}\n";
+    let out = splice(src, &[(13, 20, Action::Delete)]); // the "// note" comment
+    assert_eq!(out, "fn f() {\n    keep();\n}\n");
+}
+
+#[test]
+fn splice_delete_keeps_leading_whitespace_of_a_trailing_same_line_node() {
+    // A node with code before it on the line keeps that code and its spacing;
+    // only the node (and one trailing newline) goes.
+    let src = "keep()  // note\nnext\n";
+    let out = splice(src, &[(8, 15, Action::Delete)]); // the "// note" comment
+    assert_eq!(out, "keep()  next\n");
+}
+
+#[test]
 fn rejects_unknown_rule_key() {
     let yaml = "language: rust\n\
                 rules:\n  \

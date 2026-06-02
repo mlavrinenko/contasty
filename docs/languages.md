@@ -2,8 +2,7 @@
 
 contasty strips a language by matching AST nodes with [ast-grep] rules. Each
 supported language ships one rule file, `src/lang/rules/<lang>.yml`, embedded at
-build time. Adding a language is a rule file plus a one-line registration; no
-per-language matching logic in Rust.
+build time — a rule file plus a one-line registration, no Rust matching logic.
 
 [ast-grep]: https://ast-grep.github.io
 
@@ -26,12 +25,34 @@ per-language matching logic in Rust.
 | Kotlin     | `src/lang/rules/kotlin.yml`      | —             | `@Test`-family functions.                               |
 | Swift      | `src/lang/rules/swift.yml`       | —             | `test*` functions (XCTest naming).                      |
 | Scala      | `src/lang/rules/scala.yml`       | —             | `*Test` / `*Spec` / `*Suite` classes/objects.           |
+| Bash       | `src/lang/rules/bash.yml`        | —             | —                                                       |
+| Lua        | `src/lang/rules/lua.yml`         | —             | —                                                       |
+| Dart       | `src/lang/rules/dart.yml`        | —             | `test` / `group` / `testWidgets` / `setUp` / `tearDown` calls. |
+| Elixir     | `src/lang/rules/elixir.yml`      | —             | `test` / `describe` ExUnit blocks.                      |
+| Haskell    | `src/lang/rules/haskell.yml`     | —             | —                                                       |
+| Nix        | `src/lang/rules/nix.yml`         | —             | —                                                       |
+| Solidity   | `src/lang/rules/solidity.yml`    | —             | `test*` functions (Foundry naming).                     |
+| JSON       | `src/lang/rules/json.yml`        | string-value truncation | —                                             |
+| YAML       | `src/lang/rules/yaml.yml`        | scalar truncation | —                                                   |
+| HTML       | `src/lang/rules/html.yml`        | `<script>` / `<style>` body | —                                         |
+| CSS        | `src/lang/rules/css.yml`         | string truncation | —                                                   |
+| HCL        | `src/lang/rules/hcl.yml`         | string truncation | —                                                   |
 
 Each is an embedded rule file plus a one-line `Registry::new` registration,
 riding the 28 grammars ast-grep 0.43 bundles — no `.so`, no config. Remaining
 bundled languages are tracked in `tasks/07-builtin-languages.md`; the rule files
 carry per-rule comments. Notes:
 
+- Body elision needs the generic `{}` marker to be a valid empty body. It is for
+  the brace languages (Rust, PHP, the C-family, Go, Dart, Solidity) and HTML's
+  `<script>` / `<style>` `raw_text`; it is not for the non-brace languages — Bash
+  (`bash -n` rejects `f() {}`), Lua (`{}` is a table), Elixir (`{}` is a tuple),
+  Haskell, Nix — which keep bodies and strip only comments, imports, long strings.
+- Data/markup languages have no executable body. JSON, YAML, CSS, HCL, HTML are
+  stripping-capable (string/scalar truncation, comment dropping, HTML script/style
+  elision) and keep keys, structure, selectors, and labels. Markdown is
+  intentionally structural-only with no rule file — it is prose context, nothing
+  to elide without destroying what the tool exists to pass along.
 - The generic `{}` marker means value-init elision fires only where `{}` is
   valid in that slot: C/C++ aggregate inits (`= { ... }` → `= {}`), Ruby hashes,
   TS/TSX/JS object/array, Python dict/list/set. The "—" rows (Go, Java, C#,
@@ -61,36 +82,30 @@ overridden) fixes the dylib symbol to `tree_sitter_<name>`:
 
 ```toml
 [languages.mylang]
-# One library for the current host...
-libraryPath = "grammars/mylang.so"
+libraryPath = "grammars/mylang.so"   # or a per-target-triple map (see below)
 extensions = ["ml", "mli"]
 rules = "rules/mylang.yml"
 
-# ...or a per-target-triple map when you ship more than one platform:
+# Per-platform libraries, when you ship more than one:
 # [languages.mylang.libraryPath]
 # "x86_64-unknown-linux-gnu" = "grammars/mylang-linux.so"
 # "aarch64-apple-darwin"     = "grammars/mylang-mac.dylib"
 
-# Optional overrides:
-# languageSymbol = "tree_sitter_mylang"  # default: tree_sitter_<name>
-# metaVarChar = "$"                       # pattern sigil; default $
-# expandoChar = "_"                       # identifier-safe stand-in for $
+# Optional: languageSymbol (default tree_sitter_<name>), metaVarChar, expandoChar.
 ```
 
 Relative `libraryPath` / `rules` paths resolve against the config file's
 directory. The grammar registers once at startup and is never unloaded
 (libloading leaks the library on purpose), so every custom grammar must be
-declared in a single config. The rule file is identical to a built-in's; confirm
-`kind`/`field` names against the grammar's `node-types.json`. A missing library,
-wrong symbol, incompatible tree-sitter version, or a target absent from a
-`libraryPath` map fails with an actionable error, not a panic (only native
-libraries are supported — ast-grep has no wasm path).
+declared in a single config. The rule file is identical to a built-in's. A
+missing library, wrong symbol, incompatible tree-sitter version, or a target
+absent from a `libraryPath` map fails with an actionable error, not a panic
+(only native libraries — ast-grep has no wasm path).
 
 ## Overriding a language's rules
 
 A built-in or dynamic language can be pointed at a user rule file that extends or
-replaces its standard rules, with no rebuild — see
-[custom-rules.md](custom-rules.md).
+replaces its standard rules, with no rebuild — see [custom-rules.md](custom-rules.md).
 
 ## Schema
 
@@ -98,44 +113,33 @@ The rule file format is a generated JSON Schema (Draft 2020-12) at
 `schemas/contasty-rules.schema.json`, derived from the Rust config types so it
 never drifts: the `rule:` subtree is composed from `ast-grep-config`'s own
 `SerializableRule` schema, giving the full ast-grep rule grammar with completion.
-
-Regenerate after changing a config struct:
-
-```sh
-just gen-schema
-```
-
-The `schema_in_sync` test (run by `just check`) fails if the committed schema
-diverges from the types, so CI catches a forgotten regeneration.
+Regenerate after changing a config struct with `just gen-schema`; the
+`schema_in_sync` test (run by `just check`) fails on a forgotten regeneration.
 
 ## Editor integration
 
 ### Inline modeline (any yaml-language-server editor)
 
-Every shipped rule file starts with a modeline so editors backed by
-[yaml-language-server] pick up the schema with no per-project config:
+Every shipped rule file starts with a modeline so [yaml-language-server] editors
+pick up the schema with no per-project config (path relative to the rule file;
+new files under `src/lang/rules/` reuse it):
 
 ```yaml
 # yaml-language-server: $schema=../../../schemas/contasty-rules.schema.json
 ```
 
-The path is relative to the rule file; new files under `src/lang/rules/` reuse it.
-
 [yaml-language-server]: https://github.com/redhat-developer/yaml-language-server
 
 ### Zed
 
-Zed's YAML support is the same language server, configured in `settings.json`.
-Map a file glob to the schema (see the [Zed YAML docs]):
+Zed uses the same language server; the inline modeline covers shipped files. When
+authoring a file without one, map a glob to the schema in `settings.json` (see the
+[Zed YAML docs]):
 
 ```json
-{ "lsp": { "yaml-language-server": { "settings": {
-  "yaml": { "schemas": { "./schemas/contasty-rules.schema.json": ["src/lang/rules/*.yml"] } }
-} } } }
+{ "lsp": { "yaml-language-server": { "settings": { "yaml": { "schemas": {
+  "./schemas/contasty-rules.schema.json": ["src/lang/rules/*.yml"] } } } } } }
 ```
-
-The inline modeline already covers shipped files; the glob helps when authoring
-files that do not (yet) carry one.
 
 [Zed YAML docs]: https://zed.dev/docs/languages/yaml
 
@@ -170,12 +174,9 @@ hard error, not a silently ignored rule.
 The `tests`, `comments`, and `imports` gates are language-agnostic: any rule
 file (built-in or custom) can use them. Whether a category is active is
 controlled by the CLI and config, not by which language is being stripped.
-
-`action` semantics:
-
-- `elide` — replace the range with `{}`.
-- `delete` — remove the range plus one trailing newline.
-- `truncate` — replace a string literal with a truncation marker.
+`elide` replaces the range with `{}`, `delete` removes it plus one trailing
+newline (and the line's indentation when the node stands alone), `truncate`
+swaps a string literal for a truncation marker.
 
 The `rule` value is the full ast-grep rule grammar (`kind`, `pattern`, `regex`,
 `any`, `all`, `inside`, `has`, ...). The schema autocompletes every option; see
@@ -193,6 +194,7 @@ the [ast-grep rule reference] for semantics.
 ### Verifying node kinds
 
 Rule `kind`/`field` names are tree-sitter grammar names, not guesses — confirm
-them against the grammar's `node-types.json` or the `ast-grep` playground,
-especially for a new language. (`ast-grep run --lang L -p "$(cat f)"
---debug-query=ast f` dumps a file's tree.)
+them against the grammar's `node-types.json` or the `ast-grep` playground. The
+repo ships helpers at contasty's pinned grammar version: `just dump-ast <lang>
+<file>` (named-node tree, kinds + fields) and `just strip <file> [max-bytes]`
+(eyeball stripped output).

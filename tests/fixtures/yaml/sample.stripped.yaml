@@ -1,0 +1,10 @@
+name: calculator
+version: 1.0.0
+description: "[…CTY]"
+notes: "[…CTY]"
+nested:
+  x: 1
+  y: 2
+list:
+  - one
+  - two

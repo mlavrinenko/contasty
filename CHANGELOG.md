@@ -39,6 +39,17 @@ First public release (not yet tagged).
   hash literals; Java/C#/Kotlin/Swift/Scala keep initializers, like Go. Test
   detection spans JUnit/NUnit/xUnit attributes, GoogleTest macros, `test_*` names,
   and ScalaTest `*Spec` classes.
+- Tier 3 built-in languages, completing every grammar ast-grep bundles except
+  Markdown: Bash, Lua, Dart, Elixir, Haskell, Nix, Solidity, plus the data/markup
+  grammars JSON, YAML, HTML, CSS, HCL. Body elision where the generic `{}` marker
+  is a valid empty body — Dart and Solidity (brace bodies) and HTML's
+  `<script>`/`<style>` payloads; the non-brace languages (Bash, Lua, Elixir,
+  Haskell, Nix) keep bodies and strip comments, imports, and long strings. The
+  data/markup grammars truncate long string/scalar values, drop comments, and
+  keep keys, structure, selectors, and block labels. Markdown is intentionally
+  structural-only (prose context) and ships no rule file.
+- `delete` now removes a deleted node's indentation when it stands alone on its
+  line, so an indented import/comment/test leaves no blank stub.
 - Category model with ordered, repeatable flags: `--include=<SEL>` /
   `--exclude=<SEL>` over `comments`, `imports`, `tests`, and `all` (alias
   `everything`). Both flags are processed left to right and the last mention of
