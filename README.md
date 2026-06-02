@@ -87,7 +87,9 @@ is stronger at different things.
 | Languages with body elision            | [26, incl. JSON/YAML/HTML/CSS](docs/languages.md)                       | [16, incl. Vue](https://github.com/yamadashy/repomix/tree/main/src/core/treeSitter/queries) |
 | Add a language without a rebuild       | [yes — dynamic grammar + rules](docs/languages.md)                      | no                                                                                          |
 | Extend / override strip rules          | [yes — contasty.toml](docs/custom-rules.md)                             | no (fixed queries)                                                                          |
-| Category gating comments/imports/tests | [per-language, uniform](src/lang/rules/python.yml)                      | [comment removal only](https://repomix.com/guide/comment-removal)                           |
+| Gate comments (keep / drop)            | [yes — per-language toggle](src/lang/rules/python.yml)                  | [yes — removeComments](https://repomix.com/guide/comment-removal)                           |
+| Gate imports (keep / drop)             | [yes — --exclude=imports](src/lang/rules/python.yml)                    | no (imports kept)                                                                           |
+| Gate tests (keep / drop)               | [yes — --include/--exclude=tests](src/lang/rules/python.yml)            | no                                                                                          |
 | Stripped-region output                 | [valid empty bodies, reparseable](tests/fixtures/go/sample.stripped.go) | [⋮---- placeholder markers](https://repomix.com/guide/code-compress)                        |
 | Optional reformat of result            | [yes — Topiary / shell-out](docs/reformatting.md)                       | no                                                                                          |
 | Runtime                                | [single static binary](Cargo.toml)                                      | [Node.js](https://github.com/yamadashy/repomix)                                             |
