@@ -76,6 +76,33 @@ Category gating applies to every supported language — test and import rules in
 each built-in rule file (and any custom rule file) declare which category gates
 them, so the same flags work uniformly.
 
+## How it compares
+
+Two architectures. contasty is a one-shot stripper: walk the tree, elide bodies
+in place, print one document. The same-shape peer is repomix `--compress`. Each
+is stronger at different things.
+
+|                                        | contasty                                                                | repomix --compress                                                                          |
+| -------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Languages with body elision            | [26, incl. JSON/YAML/HTML/CSS](docs/languages.md)                       | [16, incl. Vue](https://github.com/yamadashy/repomix/tree/main/src/core/treeSitter/queries) |
+| Add a language without a rebuild       | [yes — dynamic grammar + rules](docs/languages.md)                      | no                                                                                          |
+| Extend / override strip rules          | [yes — contasty.toml](docs/custom-rules.md)                             | no (fixed queries)                                                                          |
+| Category gating comments/imports/tests | [per-language, uniform](src/lang/rules/python.yml)                      | [comment removal only](https://repomix.com/guide/comment-removal)                           |
+| Stripped-region output                 | [valid empty bodies, reparseable](tests/fixtures/go/sample.stripped.go) | [⋮---- placeholder markers](https://repomix.com/guide/code-compress)                        |
+| Optional reformat of result            | [yes — Topiary / shell-out](docs/reformatting.md)                       | no                                                                                          |
+| Runtime                                | [single static binary](Cargo.toml)                                      | [Node.js](https://github.com/yamadashy/repomix)                                             |
+| Output formats                         | [Markdown, JSON](src/render.rs)                                         | [XML, Markdown, JSON, plain](https://repomix.com/guide/output)                              |
+| Token counting                         | no (by design)                                                          | [yes, multi-tokenizer](https://repomix.com/guide/command-line-options)                      |
+| Secret scanning                        | no                                                                      | [yes](https://repomix.com/guide/security)                                                   |
+| Git integration (diffs, history)       | no                                                                      | [yes](https://repomix.com/guide/command-line-options)                                       |
+| Remote repos (clone by URL)            | no (local only)                                                         | [yes](https://repomix.com/guide/remote-repository-processing)                               |
+| MCP server                             | no (CLI; agents shell out)                                              | [yes](https://repomix.com/guide/mcp-server)                                                 |
+
+[ctx](https://docs.ctxllm.com) also extracts signatures, but only for PHP. For
+interactive, query-on-demand context, see [aider's repo map](https://aider.chat/docs/repomap.html)
+or [jCodeMunch-MCP](https://github.com/jgravelle/jcodemunch-mcp) — a different
+approach: an index the agent queries live, not a static document.
+
 ## Configuration
 
 Drop a `contasty.toml` in your project root to tune compaction thresholds,

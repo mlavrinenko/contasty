@@ -24,6 +24,7 @@ live in git history (removed from the working tree at release). Read one with
 - [x] 05 — User-extensible & overridable rule sets
 - [x] 06 — Generic reformatter: embedded Topiary + shell-out (`06-generic-reformatter.md`)
 - [ ] 07 — Built-in support for every ast-grep bundled language (`07-builtin-languages.md`) — Tier 1 (TS/TSX/JS/Python/Go) shipped; Tiers 2–3 pending
+- [x] 08 — README comparison vs repomix --compress (`08-readme-comparison.md`)
 
 ## Order
 
