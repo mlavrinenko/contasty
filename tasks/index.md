@@ -23,11 +23,17 @@ live in git history (removed from the working tree at release). Read one with
 - [x] 04 — Custom `.so` grammars via ast-grep-dynamic
 - [x] 05 — User-extensible & overridable rule sets
 - [x] 06 — Generic reformatter: embedded Topiary + shell-out (`06-generic-reformatter.md`)
-- [ ] 07 — Built-in support for every ast-grep bundled language (`07-builtin-languages.md`) — Tier 1 (TS/TSX/JS/Python/Go) shipped; Tiers 2–3 pending
+- [x] 07 — Built-in support for every ast-grep bundled language (`07-builtin-languages.md`) — all tiers shipped (26 langs; Markdown intentionally excluded)
 - [x] 08 — README comparison vs repomix --compress (`08-readme-comparison.md`)
+- [ ] 09 — Multi-path inputs: files, folders, query files, wildcards (`09-multi-path-inputs.md`)
+- [ ] 10 — Approximate token estimate in `--stats` (`10-token-estimate.md`)
 
 ## Order
 
 07 is the larger reach lever for adoption (TS/JS, Python, Go, ... at launch) and
 is pure rule-file data — pursue first. 06 is cross-cutting polish (cosmetic
 output quality) and can land independently, after or alongside 07.
+
+09 is the next adoption lever: targeted, reusable selections turn contasty into a
+routine in-repo query tool instead of a whole-tree dump. 10 is small, dependency-
+free polish (token estimate in `--stats`) and lands independently.
