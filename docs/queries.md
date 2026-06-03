@@ -156,10 +156,17 @@ When `contasty` walks a directory, any `*.cty.yaml` found inside is
 automatically unfolded. Its selected files are added to the union alongside
 other files found by the walk.
 
+### Nested query files
+
+A `rules` pattern that matches another `*.cty.yaml` unfolds it recursively,
+exactly like an `import` — its selection joins the union instead of being
+emitted as content.
+
 ## Cycle guard
 
-Imports may form cycles (A imports B, B imports A). The resolver tracks
-visited query files and skips duplicates, so cycles terminate without error.
+Imports (and `rules` that match other query files) may form cycles (A pulls in
+B, B pulls in A). The resolver tracks visited query files and skips duplicates,
+so cycles terminate without error.
 
 ## Error conditions
 

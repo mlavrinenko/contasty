@@ -11,11 +11,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use ignore::WalkBuilder;
-use ignore::gitignore::GitignoreBuilder;
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use serde::Deserialize;
 
 use crate::AppError;
-use crate::inputs::normalize;
+use crate::inputs::{is_query_file, normalize};
 
 /// Parsed query file.
 #[derive(Debug, Deserialize)]
@@ -68,11 +68,10 @@ pub fn resolve_query(
     cwd: &Path,
     visited: &mut BTreeSet<PathBuf>,
 ) -> Result<Vec<PathBuf>, AppError> {
-    let canonical = normalize(query_path);
-    if !visited.insert(canonical.clone()) {
+    let abs_query = normalize(&make_absolute(query_path, cwd));
+    if !visited.insert(abs_query.clone()) {
         return Ok(Vec::new());
     }
-    let abs_query = make_absolute(&canonical, cwd);
     let content = fs::read_to_string(&abs_query).map_err(|err| {
         AppError::Query(format!(
             "cannot read query file `{}`: {err}",
@@ -87,7 +86,7 @@ pub fn resolve_query(
         .map_or_else(|| cwd.to_path_buf(), Path::to_path_buf);
     let mut out: BTreeSet<PathBuf> = BTreeSet::new();
     if let Some(rules) = parsed.rules {
-        let selected = apply_rules(&rules, &query_dir, cwd)?;
+        let selected = apply_rules(&rules, &query_dir, cwd, visited)?;
         out.extend(selected);
     }
     for entry in &parsed.import {
@@ -102,38 +101,51 @@ pub fn resolve_query(
 /// Uses `Gitignore::matched_path_or_any_parents` so a directory pattern like
 /// `src` selects every file under `src/`. Semantics are inverted from
 /// gitignore: a gitignore "ignore" match means "select", a "whitelist"
-/// (negation) match means "deselect", and no match means "not selected".
-fn apply_rules(rules: &Rules, query_dir: &Path, cwd: &Path) -> Result<Vec<PathBuf>, AppError> {
+/// (negation) match means "deselect", and no match means "not selected". A
+/// selected `*.cty.yaml` is itself a query file: it unfolds recursively (like
+/// an `import`) rather than being emitted as content; the shared `visited` set
+/// guards against cycles.
+fn apply_rules(
+    rules: &Rules,
+    query_dir: &Path,
+    cwd: &Path,
+    visited: &mut BTreeSet<PathBuf>,
+) -> Result<Vec<PathBuf>, AppError> {
     let (patterns, root) = load_patterns(rules, query_dir, cwd)?;
-    let mut builder = GitignoreBuilder::new(&root);
-    for pat in &patterns {
-        builder
-            .add_line(None, pat)
-            .map_err(|err| AppError::Query(format!("bad pattern `{pat}`: {err}")))?;
-    }
-    let matcher = builder
-        .build()
-        .map_err(|err| AppError::Query(format!("failed to build matcher: {err}")))?;
+    let matcher = build_matcher(&patterns, &root)?;
     let mut out = Vec::new();
     if matcher.is_empty() {
         return Ok(out);
     }
     for entry in WalkBuilder::new(&root).build() {
         let entry = entry?;
-        let kind = entry.file_type();
-        if !kind.is_some_and(|k| k.is_file()) {
+        if !entry.file_type().is_some_and(|kind| kind.is_file()) {
             continue;
         }
         let path = entry.path();
-        if crate::inputs::is_query_file(path) {
+        if !matcher.matched_path_or_any_parents(path, false).is_ignore() {
             continue;
         }
-        let mat = matcher.matched_path_or_any_parents(path, false);
-        if mat.is_ignore() {
+        if is_query_file(path) {
+            out.extend(resolve_query(path, cwd, visited)?);
+        } else {
             out.push(normalize(path));
         }
     }
     Ok(out)
+}
+
+/// Compile gitignore-syntax `patterns` into a matcher rooted at `root`.
+fn build_matcher(patterns: &[String], root: &Path) -> Result<Gitignore, AppError> {
+    let mut builder = GitignoreBuilder::new(root);
+    for pat in patterns {
+        builder
+            .add_line(None, pat)
+            .map_err(|err| AppError::Query(format!("bad pattern `{pat}`: {err}")))?;
+    }
+    builder
+        .build()
+        .map_err(|err| AppError::Query(format!("failed to build matcher: {err}")))
 }
 
 /// Extract pattern lines and the root directory they are relative to.
@@ -361,6 +373,42 @@ mod tests {
             "rules: |\n  src\nimport:\n  - b.cty.yaml\n",
         );
         write(tmp.path(), "b.cty.yaml", "import:\n  - a.cty.yaml\n");
+        let query = tmp.path().join("a.cty.yaml");
+        let mut visited = BTreeSet::new();
+        let files = resolve_query(&query, tmp.path(), &mut visited).expect("resolve");
+        assert_eq!(files.len(), 1, "{files:?}");
+    }
+
+    #[test]
+    fn query_rules_matched_query_file_unfolds() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        write(tmp.path(), "real.rs", "fn r() {}\n");
+        write(tmp.path(), "sub.cty.yaml", "rules: |\n  real.rs\n");
+        // main selects only the sub-query file; its files arrive via unfold,
+        // not by being emitted as YAML content.
+        let query = write(tmp.path(), "main.cty.yaml", "rules: |\n  sub.cty.yaml\n");
+        let mut visited = BTreeSet::new();
+        let files = resolve_query(&query, tmp.path(), &mut visited).expect("resolve");
+        assert_eq!(files.len(), 1, "{files:?}");
+        assert!(
+            files
+                .first()
+                .expect("one")
+                .to_str()
+                .is_some_and(|t| t.ends_with("real.rs"))
+        );
+    }
+
+    #[test]
+    fn query_rules_cycle_guard_holds() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        write(tmp.path(), "real.rs", "fn r() {}\n");
+        write(
+            tmp.path(),
+            "a.cty.yaml",
+            "rules: |\n  real.rs\n  b.cty.yaml\n",
+        );
+        write(tmp.path(), "b.cty.yaml", "rules: |\n  a.cty.yaml\n");
         let query = tmp.path().join("a.cty.yaml");
         let mut visited = BTreeSet::new();
         let files = resolve_query(&query, tmp.path(), &mut visited).expect("resolve");
