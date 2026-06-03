@@ -221,3 +221,43 @@ fn cli_missing_path_is_an_error() {
         .assert()
         .failure();
 }
+
+#[test]
+fn cli_query_file_unfolds_to_selected_files() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    fs::create_dir_all(tmp.path().join("src")).expect("mkdir src");
+    fs::create_dir_all(tmp.path().join("lib")).expect("mkdir lib");
+    fs::write(tmp.path().join("src/a.rs"), "pub fn a() {}\n").expect("write a");
+    fs::write(tmp.path().join("lib/b.rs"), "pub fn b() {}\n").expect("write b");
+    fs::write(tmp.path().join("api.cty.yaml"), "rules: |\n  src\n").expect("write query");
+
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg(tmp.path().join("api.cty.yaml"))
+        .assert()
+        .success()
+        .stdout(contains("a.rs"))
+        .stdout(contains("pub fn a"))
+        .stdout(contains("b.rs").not());
+}
+
+#[test]
+fn cli_query_file_negation_excludes() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    fs::create_dir_all(tmp.path().join("src")).expect("mkdir src");
+    fs::write(tmp.path().join("src/keep.rs"), "pub fn keep() {}\n").expect("write keep");
+    fs::write(tmp.path().join("src/drop.rs"), "pub fn drop() {}\n").expect("write drop");
+    fs::write(
+        tmp.path().join("q.cty.yaml"),
+        "rules: |\n  src\n  !src/drop.rs\n",
+    )
+    .expect("write query");
+
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg(tmp.path().join("q.cty.yaml"))
+        .assert()
+        .success()
+        .stdout(contains("keep.rs"))
+        .stdout(contains("drop.rs").not());
+}

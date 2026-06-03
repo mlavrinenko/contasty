@@ -12,6 +12,7 @@ use thiserror::Error;
 pub mod config;
 pub mod inputs;
 mod lang;
+mod query;
 mod render;
 pub mod stats;
 mod walk;
@@ -64,4 +65,9 @@ pub enum AppError {
         /// The file that failed to parse.
         path: PathBuf,
     },
+
+    /// A query file (`*.cty.yaml`) failed to parse, resolve, or violated a
+    /// constraint (unknown field, missing required import, path escape).
+    #[error("query: {0}")]
+    Query(String),
 }

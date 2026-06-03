@@ -124,7 +124,7 @@ fn main() -> Result<()> {
     let mut config = Config::load(cli.config.as_deref(), &cwd);
     config.no_reformat = cli.no_reformat;
     let override_sel = cli_override(&ordered_selectors(&m));
-    let files = contasty::resolve(&cli.paths)?;
+    let files = contasty::resolve(&cli.paths, &cwd)?;
     let items = contasty::collect(&files, override_sel, &config)?;
     if cli.stats {
         let report = contasty::stats::compute(&items);
