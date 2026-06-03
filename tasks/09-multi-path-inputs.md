@@ -1,4 +1,4 @@
-# 09 — Multi-path inputs: files, folders, query files, wildcards
+# 09 — Multi-path inputs: files, folders, wildcards
 
 ## Context
 
@@ -9,22 +9,24 @@ dump.
 
 Today the CLI takes exactly one path (`src/main.rs`, `path: PathBuf`, default
 `"."`) and the walker (`src/walk.rs:53`) filters only by `.gitignore`. There is
-no way to combine parts of the tree, scope by glob, or save a reusable selection.
-The nearest compression peer (repomix `--compress`) scopes with `--include` /
-`--ignore` globs; contasty needs richer, project-native selection.
+no way to combine parts of the tree or scope by glob. The nearest compression
+peer (repomix `--compress`) scopes with `--include` / `--ignore` globs; contasty
+needs richer, project-native selection.
+
+This task is the foundation: multiple path args, folders, and wildcards. Two
+follow-ups extend the same resolver — `11` (query files `*.cty.yaml`) and `12`
+(gitignore modes `--all` / `--ignored` / `--non-ignored`).
 
 ## Goal
 
 `contasty` accepts multiple path arguments. Each argument unfolds to a set of
-source files; the deduped union is stripped and rendered by the existing
+source files; the deduped, sorted union is stripped and rendered by the existing
 pipeline. An argument is one of:
 
 - a source file (e.g. `src/main.rs`) — contributes itself.
-- a folder (e.g. `src/`) — walked `.gitignore`-aware; may contain both source
-  files and query files.
-- a query file — a saved selector that unfolds to other files.
+- a folder (e.g. `src/`) — walked `.gitignore`-aware.
 - a glob / wildcard (e.g. `src/**/*.rs`, `crates/*/src`) — expands to matching
-  files/folders.
+  files and folders; a folder match is walked (its whole subtree, confirmed).
 
 Two explicit phases:
 
@@ -33,64 +35,69 @@ Two explicit phases:
 
 ## Design notes
 
-- Query file: a project may have several. It is a selector that resolves to a
-  file set — when one is encountered (named directly, or found inside a walked
-  folder) it unfolds to its target files instead of being emitted as content.
-- Wildcards: expand globs ourselves — do not rely on the shell (Windows shells
-  do not expand; quoted globs do not either). Reuse `globset` (already pulled in
-  transitively via `ignore`) for matching, or the small `glob` crate for
-  filesystem expansion. No heavy dependency.
-- Dedupe: canonicalize and dedupe before phase 2 so a file reached twice (direct
-  + via folder/glob/query) appears once.
-- Determinism: keep the final list sorted (walk.rs already sorts) for stable
-  output.
+- Resolver module `src/inputs.rs`: `resolve(args) -> Result<Vec<PathBuf>>`
+  classifies each arg (file / folder / glob), unfolds folders via the existing
+  `ignore` walk, expands globs, returns a deduped sorted set. A `BTreeSet` doubles
+  as dedup + visited set (a glob may match overlapping dirs); query unfolding (task
+  `11`) hooks the same recursion. `pub`, re-exported. (Config is not needed yet —
+  task `11` adds a `config` arg when query parsing needs the base dir.)
+- Wildcards: expand globs ourselves — do not rely on the shell (Windows shells do
+  not expand; quoted globs do not either). Match with `globset` (already in the
+  tree via `ignore`; promote to a direct dep — no new compiled crate). `globset`
+  matches a full path against one glob cleanly; `ignore::overrides` was rejected
+  because its root/anchoring makes absolute paths (e.g. tempdir test paths)
+  awkward. Build with `literal_separator(true)` so `*` stops at `/` and `**`
+  crosses it. Expand a glob by walking its literal prefix (longest leading path
+  with no glob metachar) `.gitignore`-aware and matching each entry's normalized
+  path: a file match contributes itself; a directory match is walked as a folder
+  arg (subtree), via the same recursion. The `glob` crate stays rejected (bypasses
+  gitignore).
+- Dedupe: lexical-normalize each path (strip leading `./`, resolve `..`, unify
+  separators) into a `BTreeSet` — no `fs::canonicalize` (keeps relative display,
+  no symlink surprises, no fs hit). Preserve the first-seen display form so
+  `render.rs` (`common_base`, relative headings) is unaffected.
+- Determinism: `BTreeSet` is sorted; `collect` already sorts. Argument order does
+  not affect output order (matches current behaviour).
+- `collect` (`src/walk.rs`) consumes the resolved file set (phase 2) instead of a
+  single root. Breaking change to the re-exported `collect` signature
+  (`&Path` → file slice) — fine at 0.1.0. Registry build stays in `collect`.
+- Reserve the `*.cty.{yaml,yml}` sub-extension now: recognize (`is_query_file`)
+  and SKIP such files during walks (do not strip them as YAML). Unfolding lands
+  in `11`; reserving here avoids a behaviour flip when `11` ships.
+- Errors (`thiserror` / `anyhow`): a named path that does not exist → error; a
+  glob matching zero files → warn to stderr, continue; no args → default `["."]`.
 
-## Format (decided)
+## Open questions (resolved)
 
-- Query files are YAML (reuses `serde_yaml`, already a dependency — no new dep).
-  Sub-extension `*.cty.yaml`; also accept `*.cty.yml`. Both `.yaml` and `.yml`
-  spellings supported.
-- v1 schema: include/exclude globs and paths that resolve to a file set.
-  ("query" leaves room to later carry ast-grep node-level selection — v1 is file
-  selection only.) Proposed shape:
-
-      # api.cty.yaml
-      include:
-        - "src/api/**/*.rs"
-        - "src/routes.rs"
-      exclude:
-        - "**/*_tests.rs"
-
-- Recognition is by the `.cty.yaml` / `.cty.yml` sub-extension. CRITICAL: YAML is
-  itself a built-in source language (`src/lang/rules/yaml.yml`), so the resolver
-  must test the query sub-extension BEFORE language detection — otherwise a
-  `*.cty.yaml` file is taken for YAML source and stripped instead of unfolded.
-
-## Open questions (settle before coding)
-
-- Folder + query interaction: confirm a query file found inside a walked folder
-  auto-unfolds (vs only when named explicitly on the command line).
-- Nested queries: may a query file reference other query files in v1, or
-  globs/paths only.
+- Glob `crates/*/src` (matches directories): walks each matched dir's subtree.
+- Dedupe identity: lexical normalization, not `fs::canonicalize`.
 
 ## Acceptance
 
-- [ ] CLI: `path: PathBuf` → `paths: Vec<PathBuf>` (variadic, default `["."]`)
-      in `src/main.rs`; category flags keep working.
-- [ ] Resolver module (e.g. `src/inputs.rs`):
-      `resolve(args, config) -> Result<Vec<PathBuf>>` classifies each arg
-      (file / folder / query / glob), unfolds folders via the existing `ignore`
-      walk, expands globs, parses query files, returns a deduped sorted set.
-- [ ] Query-file YAML parser (`serde_yaml`) for `*.cty.{yaml,yml}`; recognition
-      by sub-extension BEFORE language detection; errors via `thiserror`/`anyhow`.
-- [ ] `collect` (`src/walk.rs`) consumes the resolved file set (phase 2) instead
-      of a single root; `.gitignore` semantics preserved for folder args.
-- [ ] Tests: multi-path union + dedupe; glob expansion; query unfolds to the
-      expected files; folder containing a query file; missing/empty args.
-- [ ] Docs: README usage + `docs/queries.md` (≤200 lines) for the query format.
+- [ ] CLI: `path: PathBuf` → `paths: Vec<PathBuf>` (variadic, default `["."]`) in
+      `src/main.rs`; category flags keep working.
+- [ ] `src/inputs.rs`: `resolve(...)` classifies file / folder / glob, unfolds
+      folders via the `ignore` walk, expands globs (subtree for dir matches),
+      lexical-dedup, sorted; `pub` + re-exported. Designed to grow per-group
+      options (gitignore mode in `12`, strip set in `13`); `collect` grows a
+      per-file strip in `13`, so avoid baking a bare `Vec<PathBuf>` assumption
+      everywhere.
+- [ ] Glob expansion via `globset` (promoted to a direct dep — already shipped
+      transitively via `ignore`, no new compiled crate) + literal-prefix
+      `.gitignore`-aware walk; no shell reliance.
+- [ ] `collect` consumes the resolved set; `.gitignore` semantics preserved for
+      folder / glob walks; render base + relative paths unchanged.
+- [ ] `*.cty.{yaml,yml}` recognized and skipped during walks (reserved for `11`).
+- [ ] Errors: missing named path errors; zero-match glob warns; no args → `"."`.
+- [ ] Tests: multi-path union + dedupe; glob → files; glob → dir subtree; folder
+      union; missing path errors; zero-match glob warns.
+- [ ] Docs: README usage (multi-path + globs).
 - [ ] `just fix-check` green.
 
 ## Out of scope
 
+- Query files (`*.cty.yaml`) — task `11`.
+- gitignore modes (`--all` / `--ignored` / `--non-ignored`, query `ignore` field)
+  — task `12`.
 - URL / remote-repo inputs — separate later task (wildcards do not apply to URLs).
 - ast-grep node-level query semantics beyond file selection.
