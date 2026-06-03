@@ -74,25 +74,25 @@ Two explicit phases:
 
 ## Acceptance
 
-- [ ] CLI: `path: PathBuf` → `paths: Vec<PathBuf>` (variadic, default `["."]`) in
+- [x] CLI: `path: PathBuf` → `paths: Vec<PathBuf>` (variadic, default `["."]`) in
       `src/main.rs`; category flags keep working.
-- [ ] `src/inputs.rs`: `resolve(...)` classifies file / folder / glob, unfolds
+- [x] `src/inputs.rs`: `resolve(...)` classifies file / folder / glob, unfolds
       folders via the `ignore` walk, expands globs (subtree for dir matches),
       lexical-dedup, sorted; `pub` + re-exported. Designed to grow per-group
       options (gitignore mode in `12`, strip set in `13`); `collect` grows a
       per-file strip in `13`, so avoid baking a bare `Vec<PathBuf>` assumption
       everywhere.
-- [ ] Glob expansion via `globset` (promoted to a direct dep — already shipped
+- [x] Glob expansion via `globset` (promoted to a direct dep — already shipped
       transitively via `ignore`, no new compiled crate) + literal-prefix
       `.gitignore`-aware walk; no shell reliance.
-- [ ] `collect` consumes the resolved set; `.gitignore` semantics preserved for
+- [x] `collect` consumes the resolved set; `.gitignore` semantics preserved for
       folder / glob walks; render base + relative paths unchanged.
-- [ ] `*.cty.{yaml,yml}` recognized and skipped during walks (reserved for `11`).
-- [ ] Errors: missing named path errors; zero-match glob warns; no args → `"."`.
-- [ ] Tests: multi-path union + dedupe; glob → files; glob → dir subtree; folder
+- [x] `*.cty.{yaml,yml}` recognized and skipped during walks (reserved for `11`).
+- [x] Errors: missing named path errors; zero-match glob warns; no args → `"."`.
+- [x] Tests: multi-path union + dedupe; glob → files; glob → dir subtree; folder
       union; missing path errors; zero-match glob warns.
-- [ ] Docs: README usage (multi-path + globs).
-- [ ] `just fix-check` green.
+- [x] Docs: README usage (multi-path + globs).
+- [x] `just fix-check` green.
 
 ## Out of scope
 
