@@ -89,22 +89,22 @@ import:
 
 ## Acceptance
 
-- [ ] `*.cty.{yaml,yml}` recognized before language detection; unfolds instead of
+- [x] `*.cty.{yaml,yml}` recognized before language detection; unfolds instead of
       emitting — both as a CLI arg and when found inside a walked folder.
-- [ ] `serde_yaml` parser; `rules` (inline / list / `{ path }`) + `import`
+- [x] `serde_yaml` parser; `rules` (inline / list / `{ path }`) + `import`
       (string / `{ path, required }`); strict (`deny_unknown_fields`); broken file
       errors.
-- [ ] gitignore-syntax selection via `ignore::overrides::Override`; `!` exclude is
+- [x] gitignore-syntax selection via `ignore::overrides::Override`; `!` exclude is
       local to the query.
-- [ ] Patterns relative to the declaring file; `../` allowed; escaping the CWD is
+- [x] Patterns relative to the declaring file; `../` allowed; escaping the CWD is
       an error.
-- [ ] `import` union; `required` defaults `true` (missing → error), `required:
+- [x] `import` union; `required` defaults `true` (missing → error), `required:
       false` → skip; cycle guard holds.
-- [ ] Tests: query unfolds to expected files; `!` exclusion; list form; external
+- [x] Tests: query unfolds to expected files; `!` exclusion; list form; external
       `{ path }` form; folder containing a query auto-unfolds; import union;
       missing required import errors; cycle guard; path-escape errors.
-- [ ] Docs: `docs/queries.md` (≤200 lines) — schema, relativity rules, examples.
-- [ ] `just fix-check` green.
+- [x] Docs: `docs/queries.md` (≤200 lines) — schema, relativity rules, examples.
+- [x] `just fix-check` green.
 
 ## Out of scope
 
