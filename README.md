@@ -58,6 +58,9 @@ contasty --format=json src/            # emit a JSON bundle instead of Markdown
 contasty --stats src/                  # print compactization statistics
 contasty --config path.toml src/       # use a specific contasty.toml
 contasty --no-reformat src/            # skip all post-strip reformatting
+contasty --ignore=disable src/         # include .gitignored files too
+contasty --ignore=reverse src/         # only .gitignored files
+contasty A --ignore=disable B --ignore=enable C  # per-path mode switching
 ```
 
 Multiple arguments resolve to a deduped, sorted union of source files. A folder is
@@ -81,6 +84,18 @@ Three categories control what is kept or dropped:
 `--include` and `--exclude` are repeatable and processed left to right, so the
 last mention of a category wins. `all` (alias `everything`) applies to all
 three at once.
+
+`--ignore=<mode>` controls `.gitignore` filtering and is repeatable, interleaved
+with paths (find-style). Each occurrence sets the mode for the paths that follow:
+
+| Mode      | Effect                                           |
+| --------- | ------------------------------------------------ |
+| `enable`  | Respect `.gitignore` — only non-ignored (default)|
+| `disable` | Include ignored files too (everything)           |
+| `reverse` | Only `.gitignore`d files                         |
+
+The default (before any `--ignore`) is `enable`. Query files can set their own
+mode with the `ignore:` field (see [docs/queries.md](docs/queries.md)).
 
 Category gating applies to every supported language — test and import rules in
 each built-in rule file (and any custom rule file) declare which category gates

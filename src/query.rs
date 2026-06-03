@@ -15,12 +15,14 @@ use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use serde::Deserialize;
 
 use crate::AppError;
-use crate::inputs::{is_query_file, normalize};
+use crate::inputs::{IgnoreMode, is_query_file, normalize};
 
 /// Parsed query file.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct QueryFile {
+    #[serde(default)]
+    ignore: Option<IgnoreMode>,
     #[serde(default)]
     rules: Option<Rules>,
     #[serde(default)]
@@ -55,9 +57,12 @@ const fn default_required() -> bool {
 /// Resolve a query file to a set of source-file paths.
 ///
 /// Parses the YAML, builds a gitignore matcher from its `rules`, walks
-/// candidates `.gitignore`-aware, filters through the matcher (with
-/// parent-directory checking), then recurses into `import` entries. Results
-/// are unioned and deduped.
+/// candidates with mode-appropriate gitignore filtering, filters through
+/// the matcher (with parent-directory checking), then recurses into
+/// `import` entries. Results are unioned and deduped.
+///
+/// The query's own `ignore` field (if set) overrides the ambient `mode`;
+/// otherwise the ambient mode applies.
 ///
 /// # Errors
 ///
@@ -65,6 +70,7 @@ const fn default_required() -> bool {
 /// CWD, or a pattern compilation failure.
 pub fn resolve_query(
     query_path: &Path,
+    mode: IgnoreMode,
     cwd: &Path,
     visited: &mut BTreeSet<PathBuf>,
 ) -> Result<Vec<PathBuf>, AppError> {
@@ -81,22 +87,24 @@ pub fn resolve_query(
     let parsed: QueryFile = serde_yaml::from_str(&content).map_err(|err| {
         AppError::Query(format!("bad query file `{}`: {err}", abs_query.display()))
     })?;
+    let effective_mode = parsed.ignore.unwrap_or(mode);
     let query_dir = abs_query
         .parent()
         .map_or_else(|| cwd.to_path_buf(), Path::to_path_buf);
     let mut out: BTreeSet<PathBuf> = BTreeSet::new();
     if let Some(rules) = parsed.rules {
-        let selected = apply_rules(&rules, &query_dir, cwd, visited)?;
+        let selected = apply_rules(&rules, effective_mode, &query_dir, cwd, visited)?;
         out.extend(selected);
     }
     for entry in &parsed.import {
-        let imported = resolve_import(entry, &query_dir, cwd, visited)?;
+        let imported = resolve_import(entry, mode, &query_dir, cwd, visited)?;
         out.extend(imported);
     }
     Ok(out.into_iter().collect())
 }
 
-/// Build a gitignore matcher from `rules`, walk candidates, and filter.
+/// Build a gitignore matcher from `rules`, walk candidates with
+/// mode-appropriate filtering, and filter.
 ///
 /// Uses `Gitignore::matched_path_or_any_parents` so a directory pattern like
 /// `src` selects every file under `src/`. Semantics are inverted from
@@ -107,6 +115,7 @@ pub fn resolve_query(
 /// guards against cycles.
 fn apply_rules(
     rules: &Rules,
+    mode: IgnoreMode,
     query_dir: &Path,
     cwd: &Path,
     visited: &mut BTreeSet<PathBuf>,
@@ -117,7 +126,8 @@ fn apply_rules(
     if matcher.is_empty() {
         return Ok(out);
     }
-    for entry in WalkBuilder::new(&root).build() {
+    let walker = build_rules_walker(&root, mode);
+    for entry in walker {
         let entry = entry?;
         if !entry.file_type().is_some_and(|kind| kind.is_file()) {
             continue;
@@ -127,12 +137,25 @@ fn apply_rules(
             continue;
         }
         if is_query_file(path) {
-            out.extend(resolve_query(path, cwd, visited)?);
+            out.extend(resolve_query(path, mode, cwd, visited)?);
         } else {
             out.push(normalize(path));
         }
     }
     Ok(out)
+}
+
+/// Build a walker for `apply_rules` under the given gitignore mode.
+fn build_rules_walker(root: &Path, mode: IgnoreMode) -> ignore::Walk {
+    match mode {
+        IgnoreMode::Enable => WalkBuilder::new(root).build(),
+        IgnoreMode::Disable | IgnoreMode::Reverse => WalkBuilder::new(root)
+            .standard_filters(false)
+            .filter_entry(|entry| {
+                !entry.file_type().is_some_and(|kind| kind.is_dir()) || entry.file_name() != ".git"
+            })
+            .build(),
+    }
 }
 
 /// Compile gitignore-syntax `patterns` into a matcher rooted at `root`.
@@ -178,6 +201,7 @@ fn load_patterns(
 /// Resolve an import entry to its file set.
 fn resolve_import(
     entry: &ImportEntry,
+    mode: IgnoreMode,
     query_dir: &Path,
     cwd: &Path,
     visited: &mut BTreeSet<PathBuf>,
@@ -197,7 +221,7 @@ fn resolve_import(
         }
         return Ok(Vec::new());
     }
-    resolve_query(&abs, cwd, visited)
+    resolve_query(&abs, mode, cwd, visited)
 }
 
 /// Split a multiline string into non-empty, non-comment lines.
@@ -239,209 +263,5 @@ fn check_within_cwd(abs_path: &Path, cwd: &Path) -> Result<(), AppError> {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::fs;
-
-    use super::*;
-
-    fn write(dir: &Path, name: &str, body: &str) -> PathBuf {
-        let path = dir.join(name);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).expect("mkdir");
-        }
-        fs::write(&path, body).expect("write");
-        path
-    }
-
-    #[test]
-    fn query_inline_rules_unfolds_matching_files() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        write(tmp.path(), "src/a.rs", "fn a() {}\n");
-        write(tmp.path(), "src/b.rs", "fn b() {}\n");
-        write(tmp.path(), "lib/c.rs", "fn c() {}\n");
-        let query = write(tmp.path(), "api.cty.yaml", "rules: |\n  src\n");
-        let mut visited = BTreeSet::new();
-        let files = resolve_query(&query, tmp.path(), &mut visited).expect("resolve");
-        assert_eq!(files.len(), 2, "{files:?}");
-        assert!(
-            files
-                .iter()
-                .all(|path| path.to_str().is_some_and(|text| text.contains("src")))
-        );
-    }
-
-    #[test]
-    fn query_negation_excludes_files() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        write(tmp.path(), "src/keep.rs", "fn k() {}\n");
-        write(tmp.path(), "src/drop.rs", "fn d() {}\n");
-        let body = "rules: |\n  src\n  !src/drop.rs\n";
-        let query = write(tmp.path(), "q.cty.yaml", body);
-        let mut visited = BTreeSet::new();
-        let files = resolve_query(&query, tmp.path(), &mut visited).expect("resolve");
-        assert_eq!(files.len(), 1, "{files:?}");
-        assert!(
-            files
-                .first()
-                .expect("one")
-                .to_str()
-                .is_some_and(|t| t.contains("keep.rs"))
-        );
-    }
-
-    #[test]
-    fn query_list_form_rules() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        write(tmp.path(), "src/a.rs", "fn a() {}\n");
-        write(tmp.path(), "src/b_test.rs", "fn b() {}\n");
-        let body = "rules:\n  - \"src/**/*.rs\"\n  - \"!**/*_test.rs\"\n";
-        let query = write(tmp.path(), "q.cty.yaml", body);
-        let mut visited = BTreeSet::new();
-        let files = resolve_query(&query, tmp.path(), &mut visited).expect("resolve");
-        assert_eq!(files.len(), 1, "{files:?}");
-        assert!(
-            files
-                .first()
-                .expect("one")
-                .to_str()
-                .is_some_and(|t| t.ends_with("a.rs"))
-        );
-    }
-
-    #[test]
-    fn query_external_rules_file() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        write(tmp.path(), "src/a.rs", "fn a() {}\n");
-        write(tmp.path(), "src/b.rs", "fn b() {}\n");
-        write(tmp.path(), "special.ignore", "src/a.rs\n");
-        let body = "rules:\n  path: ./special.ignore\n";
-        let query = write(tmp.path(), "q.cty.yaml", body);
-        let mut visited = BTreeSet::new();
-        let files = resolve_query(&query, tmp.path(), &mut visited).expect("resolve");
-        assert_eq!(files.len(), 1, "{files:?}");
-        assert!(
-            files
-                .first()
-                .expect("one")
-                .to_str()
-                .is_some_and(|t| t.ends_with("a.rs"))
-        );
-    }
-
-    #[test]
-    fn query_import_unions_results() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        write(tmp.path(), "src/a.rs", "fn a() {}\n");
-        write(tmp.path(), "lib/b.rs", "fn b() {}\n");
-        write(tmp.path(), "shared.cty.yaml", "rules: |\n  lib\n");
-        let body = "rules: |\n  src\nimport:\n  - shared.cty.yaml\n";
-        let query = write(tmp.path(), "main.cty.yaml", body);
-        let mut visited = BTreeSet::new();
-        let files = resolve_query(&query, tmp.path(), &mut visited).expect("resolve");
-        assert_eq!(files.len(), 2, "{files:?}");
-    }
-
-    #[test]
-    fn query_missing_required_import_errors() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let body = "import:\n  - missing.cty.yaml\n";
-        let query = write(tmp.path(), "q.cty.yaml", body);
-        let mut visited = BTreeSet::new();
-        let err = resolve_query(&query, tmp.path(), &mut visited)
-            .expect_err("missing required import must error");
-        assert!(matches!(err, AppError::Query(_)), "{err:?}");
-    }
-
-    #[test]
-    fn query_optional_import_skips_silently() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        write(tmp.path(), "src/a.rs", "fn a() {}\n");
-        let body = "rules: |\n  src\nimport:\n  - path: missing.cty.yaml\n    required: false\n";
-        let query = write(tmp.path(), "q.cty.yaml", body);
-        let mut visited = BTreeSet::new();
-        let files = resolve_query(&query, tmp.path(), &mut visited).expect("resolve");
-        assert_eq!(files.len(), 1, "{files:?}");
-    }
-
-    #[test]
-    fn query_cycle_guard_prevents_infinite_recursion() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        write(tmp.path(), "src/a.rs", "fn a() {}\n");
-        write(
-            tmp.path(),
-            "a.cty.yaml",
-            "rules: |\n  src\nimport:\n  - b.cty.yaml\n",
-        );
-        write(tmp.path(), "b.cty.yaml", "import:\n  - a.cty.yaml\n");
-        let query = tmp.path().join("a.cty.yaml");
-        let mut visited = BTreeSet::new();
-        let files = resolve_query(&query, tmp.path(), &mut visited).expect("resolve");
-        assert_eq!(files.len(), 1, "{files:?}");
-    }
-
-    #[test]
-    fn query_rules_matched_query_file_unfolds() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        write(tmp.path(), "real.rs", "fn r() {}\n");
-        write(tmp.path(), "sub.cty.yaml", "rules: |\n  real.rs\n");
-        // main selects only the sub-query file; its files arrive via unfold,
-        // not by being emitted as YAML content.
-        let query = write(tmp.path(), "main.cty.yaml", "rules: |\n  sub.cty.yaml\n");
-        let mut visited = BTreeSet::new();
-        let files = resolve_query(&query, tmp.path(), &mut visited).expect("resolve");
-        assert_eq!(files.len(), 1, "{files:?}");
-        assert!(
-            files
-                .first()
-                .expect("one")
-                .to_str()
-                .is_some_and(|t| t.ends_with("real.rs"))
-        );
-    }
-
-    #[test]
-    fn query_rules_cycle_guard_holds() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        write(tmp.path(), "real.rs", "fn r() {}\n");
-        write(
-            tmp.path(),
-            "a.cty.yaml",
-            "rules: |\n  real.rs\n  b.cty.yaml\n",
-        );
-        write(tmp.path(), "b.cty.yaml", "rules: |\n  a.cty.yaml\n");
-        let query = tmp.path().join("a.cty.yaml");
-        let mut visited = BTreeSet::new();
-        let files = resolve_query(&query, tmp.path(), &mut visited).expect("resolve");
-        assert_eq!(files.len(), 1, "{files:?}");
-    }
-
-    #[test]
-    fn query_path_escape_errors() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let body = "import:\n  - ../../etc/something.cty.yaml\n";
-        let query = write(tmp.path(), "q.cty.yaml", body);
-        let mut visited = BTreeSet::new();
-        let err = resolve_query(&query, tmp.path(), &mut visited).expect_err("escape must error");
-        assert!(matches!(err, AppError::Query(_)), "{err:?}");
-    }
-
-    #[test]
-    fn query_broken_yaml_errors() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let query = write(tmp.path(), "q.cty.yaml", "not: [valid: yaml");
-        let mut visited = BTreeSet::new();
-        let err =
-            resolve_query(&query, tmp.path(), &mut visited).expect_err("broken yaml must error");
-        assert!(matches!(err, AppError::Query(_)), "{err:?}");
-    }
-
-    #[test]
-    fn query_unknown_field_errors() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let query = write(tmp.path(), "q.cty.yaml", "rules: |\n  src\nbogus: true\n");
-        let mut visited = BTreeSet::new();
-        let err =
-            resolve_query(&query, tmp.path(), &mut visited).expect_err("unknown field must error");
-        assert!(matches!(err, AppError::Query(_)), "{err:?}");
-    }
-}
+#[path = "query_tests.rs"]
+mod tests;

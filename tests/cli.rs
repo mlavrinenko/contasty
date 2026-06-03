@@ -261,3 +261,102 @@ fn cli_query_file_negation_excludes() {
         .stdout(contains("keep.rs"))
         .stdout(contains("drop.rs").not());
 }
+
+fn init_git_repo(dir: &std::path::Path) {
+    std::fs::create_dir_all(dir.join(".git")).expect("mkdir .git");
+}
+
+#[test]
+fn cli_default_respects_gitignore() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    init_git_repo(tmp.path());
+    fs::write(tmp.path().join(".gitignore"), "ignored.rs\n").expect("write gitignore");
+    fs::write(tmp.path().join("kept.rs"), "pub fn kept() {}\n").expect("write kept");
+    fs::write(tmp.path().join("ignored.rs"), "pub fn ignored() {}\n").expect("write ignored");
+
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg(tmp.path())
+        .assert()
+        .success()
+        .stdout(contains("kept.rs"))
+        .stdout(contains("ignored.rs").not());
+}
+
+#[test]
+fn cli_ignore_disable_includes_ignored() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    init_git_repo(tmp.path());
+    fs::write(tmp.path().join(".gitignore"), "ignored.rs\n").expect("write gitignore");
+    fs::write(tmp.path().join("kept.rs"), "pub fn kept() {}\n").expect("write kept");
+    fs::write(tmp.path().join("ignored.rs"), "pub fn ignored() {}\n").expect("write ignored");
+
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg("--ignore=disable")
+        .arg(tmp.path())
+        .assert()
+        .success()
+        .stdout(contains("kept.rs"))
+        .stdout(contains("ignored.rs"));
+}
+
+#[test]
+fn cli_ignore_reverse_only_ignored() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    init_git_repo(tmp.path());
+    fs::write(tmp.path().join(".gitignore"), "ignored.rs\n").expect("write gitignore");
+    fs::write(tmp.path().join("kept.rs"), "pub fn kept() {}\n").expect("write kept");
+    fs::write(tmp.path().join("ignored.rs"), "pub fn ignored() {}\n").expect("write ignored");
+
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg("--ignore=reverse")
+        .arg(tmp.path())
+        .assert()
+        .success()
+        .stdout(contains("ignored.rs"))
+        .stdout(contains("kept.rs").not());
+}
+
+#[test]
+fn cli_ignore_interleave_mode_switch() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    init_git_repo(tmp.path());
+    fs::write(tmp.path().join(".gitignore"), "ignored.rs\n").expect("write gitignore");
+    fs::write(tmp.path().join("kept.rs"), "pub fn kept() {}\n").expect("write kept");
+    fs::write(tmp.path().join("ignored.rs"), "pub fn ignored() {}\n").expect("write ignored");
+
+    // First arg uses enable (default), second uses reverse.
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg(tmp.path().join("kept.rs"))
+        .arg("--ignore=reverse")
+        .arg(tmp.path().join("ignored.rs"))
+        .assert()
+        .success()
+        .stdout(contains("kept.rs"))
+        .stdout(contains("ignored.rs"));
+}
+
+#[test]
+fn cli_query_ignore_field_wins() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    init_git_repo(tmp.path());
+    fs::write(tmp.path().join(".gitignore"), "generated/\n").expect("write gitignore");
+    fs::create_dir_all(tmp.path().join("generated")).expect("mkdir generated");
+    fs::write(tmp.path().join("generated/foo.rs"), "pub fn foo() {}\n").expect("write generated");
+    // Query sets ignore: disable so it can reach the gitignored directory.
+    fs::write(
+        tmp.path().join("gen.cty.yaml"),
+        "ignore: disable\nrules: |\n  generated\n",
+    )
+    .expect("write query");
+
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg(tmp.path().join("gen.cty.yaml"))
+        .assert()
+        .success()
+        .stdout(contains("foo.rs"));
+}

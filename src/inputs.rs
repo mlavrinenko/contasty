@@ -1,58 +1,72 @@
 //! Input resolution: classify each path argument (file, folder, or glob) and
 //! unfold it to a deduped, sorted set of source files for the strip pipeline.
 //!
-//! Folders are walked `.gitignore`-aware; globs are expanded against the
-//! filesystem (file matches contribute themselves, directory matches are
-//! walked); query files (`*.cty.{yaml,yml}`) are unfolded to their selected
-//! source files. Paths are lexically normalized so a file reached by several
-//! arguments appears once.
+//! Each path carries an [`IgnoreMode`] that controls `.gitignore` filtering:
+//! `enable` (default, respect gitignore), `disable` (include ignored files),
+//! or `reverse` (only ignored files). Folders are walked gitignore-aware;
+//! globs are expanded internally; query files (`*.cty.{yaml,yml}`) unfold
+//! to their selected source files.
 
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 
 use globset::GlobBuilder;
 use ignore::WalkBuilder;
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 
 use crate::AppError;
 
 /// Glob metacharacters that mark an argument for expansion.
 const GLOB_META: [char; 4] = ['*', '?', '[', '{'];
 
+/// How `.gitignore` filtering applies to a path argument's candidates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[derive(Default)]
+pub enum IgnoreMode {
+    /// Respect `.gitignore` — only non-ignored files (default).
+    #[default]
+    Enable,
+    /// Ignore `.gitignore` — include ignored files too (everything).
+    Disable,
+    /// Invert — only `.gitignore`d files.
+    Reverse,
+}
+
 /// Resolve raw path arguments to a deduped, sorted set of source files.
 ///
-/// Each argument is a source file, a folder (walked `.gitignore`-aware), a
-/// glob, or a query file (`*.cty.{yaml,yml}` — unfolded to its selected
-/// files). Empty input defaults to the current directory. `cwd` is the
-/// working directory used to sandbox query-derived paths.
+/// Each argument pairs a path with an [`IgnoreMode`] controlling gitignore
+/// filtering. Empty input defaults to the current directory with [`IgnoreMode::Enable`].
 ///
 /// # Errors
 ///
-/// [`AppError::Input`] when a named (non-glob) path does not exist or a glob
-/// is malformed. [`AppError::Walk`] from the `ignore` walker.
-/// [`AppError::Query`] from query file resolution.
-pub fn resolve(args: &[PathBuf], cwd: &Path) -> Result<Vec<PathBuf>, AppError> {
-    let default = [PathBuf::from(".")];
+/// [`AppError::Input`] when a named path does not exist or a glob is
+/// malformed. [`AppError::Walk`] from the walker. [`AppError::Query`]
+/// from query file resolution.
+pub fn resolve(args: &[(PathBuf, IgnoreMode)], cwd: &Path) -> Result<Vec<PathBuf>, AppError> {
+    let default = [(PathBuf::from("."), IgnoreMode::Enable)];
     let args = if args.is_empty() { &default[..] } else { args };
     let mut out: BTreeSet<PathBuf> = BTreeSet::new();
     let mut visited: BTreeSet<PathBuf> = BTreeSet::new();
-    for arg in args {
-        resolve_one(arg, cwd, &mut visited, &mut out)?;
+    for (arg, mode) in args {
+        resolve_one(arg, *mode, cwd, &mut visited, &mut out)?;
     }
     Ok(out.into_iter().collect())
 }
 
 fn resolve_one(
     arg: &Path,
+    mode: IgnoreMode,
     cwd: &Path,
     visited: &mut BTreeSet<PathBuf>,
     out: &mut BTreeSet<PathBuf>,
 ) -> Result<(), AppError> {
     if is_glob(arg) {
-        expand_glob(arg, cwd, visited, out)
+        expand_glob(arg, mode, cwd, visited, out)
     } else if arg.is_dir() {
-        walk_dir(arg, cwd, visited, out)
+        walk_dir(arg, mode, cwd, visited, out)
     } else if arg.is_file() {
-        add_or_unfold(arg, cwd, visited, out)
+        add_or_unfold(arg, mode, cwd, visited, out)
     } else {
         Err(AppError::Input(format!(
             "path not found: {}",
@@ -75,14 +89,22 @@ pub(crate) fn is_query_file(path: &Path) -> bool {
 }
 
 /// Add a regular file or unfold a query file into the output set.
+///
+/// In `Enable` mode, files pass unconditionally (the walker already filtered
+/// ignored entries). In `Disable`, every named file is admitted. In `Reverse`,
+/// a file must be `.gitignore`d to qualify.
 fn add_or_unfold(
     path: &Path,
+    mode: IgnoreMode,
     cwd: &Path,
     visited: &mut BTreeSet<PathBuf>,
     out: &mut BTreeSet<PathBuf>,
 ) -> Result<(), AppError> {
+    if !file_passes_mode(path, mode, cwd)? {
+        return Ok(());
+    }
     if is_query_file(path) {
-        let files = crate::query::resolve_query(path, cwd, visited)?;
+        let files = crate::query::resolve_query(path, mode, cwd, visited)?;
         out.extend(files);
         return Ok(());
     }
@@ -90,8 +112,40 @@ fn add_or_unfold(
     Ok(())
 }
 
-/// Walk a directory `.gitignore`-aware, adding every file it yields.
+/// Test a named file against the gitignore mode filter.
+fn file_passes_mode(path: &Path, mode: IgnoreMode, cwd: &Path) -> Result<bool, AppError> {
+    match mode {
+        IgnoreMode::Enable | IgnoreMode::Disable => Ok(true),
+        IgnoreMode::Reverse => {
+            let abs_path = if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                cwd.join(path)
+            };
+            let parent = abs_path.parent().unwrap_or(&abs_path);
+            let matcher = build_gitignore_matcher(parent)?;
+            Ok(is_ignored(&matcher, parent, &abs_path))
+        }
+    }
+}
+
+/// Walk a directory with mode-appropriate gitignore filtering.
 fn walk_dir(
+    root: &Path,
+    mode: IgnoreMode,
+    cwd: &Path,
+    visited: &mut BTreeSet<PathBuf>,
+    out: &mut BTreeSet<PathBuf>,
+) -> Result<(), AppError> {
+    match mode {
+        IgnoreMode::Enable => walk_enable(root, cwd, visited, out),
+        IgnoreMode::Disable => walk_disable(root, cwd, visited, out),
+        IgnoreMode::Reverse => walk_reverse(root, cwd, visited, out),
+    }
+}
+
+/// Standard gitignore-aware walk (default behaviour).
+fn walk_enable(
     root: &Path,
     cwd: &Path,
     visited: &mut BTreeSet<PathBuf>,
@@ -100,17 +154,109 @@ fn walk_dir(
     for entry in WalkBuilder::new(root).build() {
         let entry = entry?;
         if entry.file_type().is_some_and(|kind| kind.is_file()) {
-            add_or_unfold(entry.path(), cwd, visited, out)?;
+            add_or_unfold(entry.path(), IgnoreMode::Enable, cwd, visited, out)?;
         }
     }
     Ok(())
 }
 
-/// Expand a glob: walk its literal prefix `.gitignore`-aware and match each
-/// entry's normalized path; files contribute themselves, matched directories
-/// are walked. Zero matches warn to stderr and continue.
+/// Walk with gitignore filters off, still skipping `.git/` directories.
+fn walk_disable(
+    root: &Path,
+    cwd: &Path,
+    visited: &mut BTreeSet<PathBuf>,
+    out: &mut BTreeSet<PathBuf>,
+) -> Result<(), AppError> {
+    let walker = WalkBuilder::new(root)
+        .standard_filters(false)
+        .filter_entry(|entry| {
+            !entry.file_type().is_some_and(|kind| kind.is_dir()) || entry.file_name() != ".git"
+        })
+        .build();
+    for entry in walker {
+        let entry = entry?;
+        if entry.file_type().is_some_and(|kind| kind.is_file()) {
+            add_or_unfold(entry.path(), IgnoreMode::Disable, cwd, visited, out)?;
+        }
+    }
+    Ok(())
+}
+
+/// Walk with all filters off, keeping only paths the `.gitignore` marks
+/// ignored. Skips `.git/` directories to avoid VCS internals.
+fn walk_reverse(
+    root: &Path,
+    cwd: &Path,
+    visited: &mut BTreeSet<PathBuf>,
+    out: &mut BTreeSet<PathBuf>,
+) -> Result<(), AppError> {
+    let matcher = build_gitignore_matcher(root)?;
+    let walker = WalkBuilder::new(root)
+        .standard_filters(false)
+        .filter_entry(|entry| {
+            !entry.file_type().is_some_and(|kind| kind.is_dir()) || entry.file_name() != ".git"
+        })
+        .build();
+    for entry in walker {
+        let entry = entry?;
+        if !entry.file_type().is_some_and(|kind| kind.is_file()) {
+            continue;
+        }
+        let path = entry.path();
+        if !is_ignored(&matcher, root, path) {
+            continue;
+        }
+        // Already passed the reverse filter; add or unfold directly.
+        if is_query_file(path) {
+            let files = crate::query::resolve_query(path, IgnoreMode::Reverse, cwd, visited)?;
+            out.extend(files);
+        } else {
+            out.insert(normalize(path));
+        }
+    }
+    Ok(())
+}
+
+/// Build a composite gitignore matcher from every `.gitignore` under `root`.
+fn build_gitignore_matcher(root: &Path) -> Result<Gitignore, AppError> {
+    let mut builder = GitignoreBuilder::new(root);
+    let walker = WalkBuilder::new(root)
+        .standard_filters(false)
+        .filter_entry(|entry| {
+            !entry.file_type().is_some_and(|kind| kind.is_dir()) || entry.file_name() != ".git"
+        })
+        .build();
+    for entry in walker {
+        let entry = entry?;
+        if entry.file_name() == ".gitignore" && entry.file_type().is_some_and(|kind| kind.is_file())
+        {
+            builder.add(entry.path());
+        }
+    }
+    builder
+        .build()
+        .map_err(|err| AppError::Input(format!("failed to build gitignore matcher: {err}")))
+}
+
+/// True when `path` is marked ignored by `matcher` (rooted at `root`).
+fn is_ignored(matcher: &Gitignore, root: &Path, path: &Path) -> bool {
+    if matcher.is_empty() {
+        return false;
+    }
+    let Ok(relative) = path.strip_prefix(root) else {
+        return false;
+    };
+    matcher
+        .matched_path_or_any_parents(relative, false)
+        .is_ignore()
+}
+
+/// Expand a glob: walk its literal prefix with mode-appropriate filters and
+/// match each entry's normalized path. Files contribute themselves, matched
+/// directories are walked. Zero matches warn to stderr and continue.
 fn expand_glob(
     pattern: &Path,
+    mode: IgnoreMode,
     cwd: &Path,
     visited: &mut BTreeSet<PathBuf>,
     out: &mut BTreeSet<PathBuf>,
@@ -129,7 +275,8 @@ fn expand_glob(
         return Ok(());
     }
     let mut hits = 0_usize;
-    for entry in WalkBuilder::new(&prefix).build() {
+    let walker = build_glob_walker(&prefix, mode);
+    for entry in walker {
         let entry = entry?;
         if !matcher.is_match(normalize(entry.path())) {
             continue;
@@ -137,15 +284,28 @@ fn expand_glob(
         hits += 1;
         let kind = entry.file_type();
         if kind.is_some_and(|item| item.is_dir()) {
-            walk_dir(entry.path(), cwd, visited, out)?;
+            walk_dir(entry.path(), mode, cwd, visited, out)?;
         } else if kind.is_some_and(|item| item.is_file()) {
-            add_or_unfold(entry.path(), cwd, visited, out)?;
+            add_or_unfold(entry.path(), mode, cwd, visited, out)?;
         }
     }
     if hits == 0 {
         warn_no_match(glob_text);
     }
     Ok(())
+}
+
+/// Build a walker for glob literal-prefix expansion under the given mode.
+fn build_glob_walker(prefix: &Path, mode: IgnoreMode) -> ignore::Walk {
+    match mode {
+        IgnoreMode::Enable => WalkBuilder::new(prefix).build(),
+        IgnoreMode::Disable | IgnoreMode::Reverse => WalkBuilder::new(prefix)
+            .standard_filters(false)
+            .filter_entry(|entry| {
+                !entry.file_type().is_some_and(|kind| kind.is_dir()) || entry.file_name() != ".git"
+            })
+            .build(),
+    }
 }
 
 fn warn_no_match(glob_text: &str) {
@@ -196,106 +356,5 @@ pub(crate) fn normalize(path: &Path) -> PathBuf {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::fs;
-
-    use super::*;
-
-    fn write(dir: &Path, name: &str, body: &str) -> PathBuf {
-        let path = dir.join(name);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).expect("mkdir");
-        }
-        fs::write(&path, body).expect("write");
-        path
-    }
-
-    #[test]
-    fn resolve_unions_and_dedups_file_and_folder() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let one = write(tmp.path(), "a.rs", "fn a() {}\n");
-        write(tmp.path(), "b.rs", "fn b() {}\n");
-        let files = resolve(&[tmp.path().to_path_buf(), one], tmp.path()).expect("resolve");
-        assert_eq!(files.len(), 2, "{files:?}");
-    }
-
-    #[test]
-    fn resolve_missing_path_errors() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let missing = tmp.path().join("nope.rs");
-        let err = resolve(&[missing], tmp.path()).expect_err("missing must error");
-        assert!(matches!(err, AppError::Input(_)), "{err:?}");
-    }
-
-    #[test]
-    fn resolve_glob_matches_files_only() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        write(tmp.path(), "a.rs", "fn a() {}\n");
-        write(tmp.path(), "b.rs", "fn b() {}\n");
-        write(tmp.path(), "c.txt", "text\n");
-        let files = resolve(&[tmp.path().join("*.rs")], tmp.path()).expect("resolve");
-        assert_eq!(files.len(), 2, "{files:?}");
-        assert!(
-            files
-                .iter()
-                .all(|path| path.extension().is_some_and(|ext| ext == "rs"))
-        );
-    }
-
-    #[test]
-    fn resolve_glob_walks_matched_directory_subtree() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        write(tmp.path(), "crates/x/src/lib.rs", "fn x() {}\n");
-        write(tmp.path(), "crates/y/src/lib.rs", "fn y() {}\n");
-        write(tmp.path(), "crates/x/readme.md", "doc\n");
-        let files = resolve(&[tmp.path().join("crates/*/src")], tmp.path()).expect("resolve");
-        assert_eq!(files.len(), 2, "{files:?}");
-        assert!(files.iter().all(|path| path.ends_with("src/lib.rs")));
-    }
-
-    #[test]
-    fn resolve_unfolds_query_file_in_folder() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        write(tmp.path(), "src/a.rs", "fn a() {}\n");
-        write(tmp.path(), "lib/b.rs", "fn b() {}\n");
-        write(tmp.path(), "api.cty.yaml", "rules: |\n  src\n");
-        let files = resolve(&[tmp.path().to_path_buf()], tmp.path()).expect("resolve");
-        assert_eq!(
-            files.len(),
-            2,
-            "walk adds lib/b.rs, query adds src/a.rs: {files:?}"
-        );
-        assert!(
-            files
-                .iter()
-                .any(|path| path.to_str().is_some_and(|text| text.contains("src/a.rs")))
-        );
-    }
-
-    #[test]
-    fn resolve_unfolds_query_file_as_direct_arg() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        write(tmp.path(), "src/a.rs", "fn a() {}\n");
-        write(tmp.path(), "lib/b.rs", "fn b() {}\n");
-        let query = write(tmp.path(), "api.cty.yaml", "rules: |\n  src\n");
-        let files = resolve(&[query], tmp.path()).expect("resolve");
-        assert_eq!(files.len(), 1, "{files:?}");
-    }
-
-    #[test]
-    fn resolve_glob_zero_match_is_not_an_error() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        write(tmp.path(), "a.txt", "text\n");
-        let files = resolve(&[tmp.path().join("*.rs")], tmp.path()).expect("zero match warns");
-        assert!(files.is_empty(), "{files:?}");
-    }
-
-    #[test]
-    fn normalize_resolves_dot_and_parent() {
-        assert_eq!(
-            normalize(Path::new("./src/../src/a.rs")),
-            PathBuf::from("src/a.rs")
-        );
-        assert_eq!(normalize(Path::new("a/b/../c")), PathBuf::from("a/c"));
-    }
-}
+#[path = "inputs_tests.rs"]
+mod tests;

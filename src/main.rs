@@ -6,6 +6,7 @@ use clap::{CommandFactory, FromArgMatches, Parser, ValueEnum};
 
 use contasty::CategorySelection;
 use contasty::config::Config;
+use contasty::inputs::IgnoreMode;
 
 /// Output format for the stripped bundle.
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -53,6 +54,13 @@ struct Cli {
     /// --include; last mention of a category wins.
     #[arg(long, value_enum, value_name = "SEL")]
     exclude: Vec<Selector>,
+
+    /// Control .gitignore filtering (repeatable, interleaved with paths).
+    /// Modes: enable (default, respect .gitignore), disable (include ignored
+    /// files too), reverse (only .gitignored files). Each occurrence sets the
+    /// mode for the paths that follow until the next --ignore.
+    #[arg(long, value_enum, value_name = "MODE")]
+    ignore: Vec<IgnoreMode>,
 
     /// Print compactization statistics instead of the stripped code.
     /// Shows original vs compacted line counts (code, comments, blanks).
@@ -116,6 +124,40 @@ fn cli_override(ops: &[(Op, Selector)]) -> CategorySelection {
     sel
 }
 
+/// Group positional paths by interleaved `--ignore` mode switches.
+///
+/// Each path receives the most-recently-seen mode (default `Enable`).
+/// Consecutive paths sharing a mode are coalesced into one group.
+fn path_groups(m: &clap::ArgMatches) -> Vec<(PathBuf, IgnoreMode)> {
+    let mut events: Vec<(usize, Option<IgnoreMode>, Option<PathBuf>)> = Vec::new();
+    if let Some(modes) = m.get_many::<IgnoreMode>("ignore") {
+        if let Some(indices) = m.indices_of("ignore") {
+            for (mode_val, idx) in modes.copied().zip(indices) {
+                events.push((idx, Some(mode_val), None));
+            }
+        }
+    }
+    if let Some(paths) = m.get_many::<PathBuf>("paths") {
+        if let Some(indices) = m.indices_of("paths") {
+            for (path, idx) in paths.cloned().zip(indices) {
+                events.push((idx, None, Some(path)));
+            }
+        }
+    }
+    events.sort_by_key(|&(idx, _, _)| idx);
+    let mut out = Vec::new();
+    let mut active = IgnoreMode::Enable;
+    for (_, maybe_mode, maybe_path) in events {
+        if let Some(mode_val) = maybe_mode {
+            active = mode_val;
+        }
+        if let Some(path) = maybe_path {
+            out.push((path, active));
+        }
+    }
+    out
+}
+
 fn main() -> Result<()> {
     env_logger::init();
     let m = Cli::command().get_matches();
@@ -124,7 +166,8 @@ fn main() -> Result<()> {
     let mut config = Config::load(cli.config.as_deref(), &cwd);
     config.no_reformat = cli.no_reformat;
     let override_sel = cli_override(&ordered_selectors(&m));
-    let files = contasty::resolve(&cli.paths, &cwd)?;
+    let groups = path_groups(&m);
+    let files = contasty::resolve(&groups, &cwd)?;
     let items = contasty::collect(&files, override_sel, &config)?;
     if cli.stats {
         let report = contasty::stats::compute(&items);

@@ -22,14 +22,36 @@ This selects every file under `src/Domain/` except those under
 
 ## Schema
 
-A query file has two optional top-level keys:
+A query file has three optional top-level keys:
 
 | Key      | Purpose                                      |
 |----------|----------------------------------------------|
+| `ignore` | Gitignore filtering mode for this query       |
 | `rules`  | Gitignore-syntax selection patterns           |
 | `import` | Other query files to union into the result    |
 
 Unknown keys are rejected (`deny_unknown_fields`).
+
+### `ignore`
+
+Controls `.gitignore` filtering for this query's selection. Accepts the same
+values as the CLI `--ignore` flag:
+
+| Value     | Effect                                           |
+|-----------|--------------------------------------------------|
+| `enable`  | Respect `.gitignore` — only non-ignored (default)|
+| `disable` | Include ignored files too (everything)           |
+| `reverse` | Only `.gitignore`d files                         |
+
+When set, the query's own `ignore` wins its selection; when absent, inherits
+the ambient mode from the CLI (the most recent `--ignore` or `enable` by default).
+
+```yaml
+# Reach generated files that .gitignore excludes.
+ignore: disable
+rules: |
+  generated/**
+```
 
 ### `rules`
 
@@ -59,9 +81,9 @@ rules:
   path: ./special.ignore
 ```
 
-When `path` points to an external file, patterns are relative to that file's
-directory (just like a real `.gitignore`). Inline and list patterns are
-relative to the query file's own directory.
+Patterns in an external file are relative to that file's directory (like
+`.gitignore`); inline and list patterns are relative to the query file's own
+directory.
 
 ### `import`
 
@@ -150,17 +172,12 @@ src/Controller
 !src/Controller/Admin
 ```
 
-### Query inside a walked folder
+### Query inside a walked folder / Nested query files
 
 When `contasty` walks a directory, any `*.cty.yaml` found inside is
-automatically unfolded. Its selected files are added to the union alongside
-other files found by the walk.
-
-### Nested query files
-
-A `rules` pattern that matches another `*.cty.yaml` unfolds it recursively,
-exactly like an `import` — its selection joins the union instead of being
-emitted as content.
+automatically unfolded. If its `rules` match another `*.cty.yaml`, that file
+unfolds recursively — its selection joins the union instead of being emitted as
+content.
 
 ## Cycle guard
 
