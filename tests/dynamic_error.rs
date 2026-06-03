@@ -24,7 +24,8 @@ fn missing_library_is_actionable_not_a_panic() {
     .expect("write config");
 
     let config = Config::load(Some(&tmp.path().join("contasty.toml")), tmp.path());
-    let err = contasty::collect(tmp.path(), contasty::CategorySelection::default(), &config)
+    let files = contasty::resolve(&[tmp.path().to_path_buf()]).expect("resolve");
+    let err = contasty::collect(&files, contasty::CategorySelection::default(), &config)
         .err()
         .expect("missing grammar must error");
 

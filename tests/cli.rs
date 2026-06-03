@@ -174,3 +174,50 @@ fn cli_everything_alias_equals_all() {
 
     assert_eq!(all_out.stdout, everything_out.stdout);
 }
+
+#[test]
+fn cli_accepts_multiple_path_arguments() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    fs::write(tmp.path().join("a.rs"), "pub fn a() {}\n").expect("write a");
+    fs::write(tmp.path().join("b.rs"), "pub fn b() {}\n").expect("write b");
+
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg(tmp.path().join("a.rs"))
+        .arg(tmp.path().join("b.rs"))
+        .assert()
+        .success()
+        .stdout(contains("a.rs"))
+        .stdout(contains("b.rs"))
+        .stdout(contains("pub fn a"))
+        .stdout(contains("pub fn b"));
+}
+
+#[test]
+fn cli_expands_glob_internally() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    fs::write(tmp.path().join("a.rs"), "pub fn a() {}\n").expect("write a");
+    fs::write(tmp.path().join("b.rs"), "pub fn b() {}\n").expect("write b");
+    // a supported non-match: present in the dir but outside the `*.rs` glob.
+    fs::write(tmp.path().join("other.py"), "def other():\n    pass\n").expect("write py");
+
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg(tmp.path().join("*.rs"))
+        .assert()
+        .success()
+        .stdout(contains("a.rs"))
+        .stdout(contains("b.rs"))
+        .stdout(contains("other.py").not());
+}
+
+#[test]
+fn cli_missing_path_is_an_error() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg(tmp.path().join("does-not-exist.rs"))
+        .assert()
+        .failure();
+}

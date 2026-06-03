@@ -10,12 +10,14 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 pub mod config;
+pub mod inputs;
 mod lang;
 mod render;
 pub mod stats;
 mod walk;
 
 pub use config::CategorySelection;
+pub use inputs::resolve;
 pub use lang::{Registry, rules_schema_json};
 pub use render::{render_json, render_markdown};
 pub use walk::{Stripped, collect};
@@ -30,6 +32,11 @@ pub enum AppError {
     /// The gitignore-aware walker reported an error.
     #[error("walk: {0}")]
     Walk(#[from] ignore::Error),
+
+    /// A path argument could not be resolved: a named path does not exist, or a
+    /// glob is malformed.
+    #[error("input: {0}")]
+    Input(String),
 
     /// An embedded rule set could not be parsed as YAML.
     #[error("rule parse: {0}")]

@@ -404,6 +404,7 @@ dependencies = [
  "ast-grep-language",
  "clap",
  "env_logger",
+ "globset",
  "ignore",
  "log",
  "predicates",

@@ -56,6 +56,7 @@ ast-grep-language = "0.43"
 ast-grep-dynamic = "0.43"
 schemars = "1"
 ignore = "0.4"
+globset = "0.4"
 rayon = "1"
 tokei = { version = "14", default-features = false }
 serde = { version = "1", features = ["derive"] }

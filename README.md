@@ -43,6 +43,10 @@ Download a pre-built binary from the
 ```bash
 contasty src/ > context.md             # strip a directory
 contasty src/lib.rs                    # strip a single file
+contasty src/ tests/ > context.md      # multiple paths (deduped union)
+contasty src/lib.rs src/main.rs        # several files at once
+contasty 'src/**/*.rs'                 # glob (quote it; expanded internally)
+contasty 'crates/*/src'                # glob to dirs; each subtree is walked
 contasty                               # default path is "."
 contasty --include=comments src/       # keep comments (doc comments included)
 contasty --include=tests src/          # keep test functions and test modules
@@ -55,6 +59,12 @@ contasty --stats src/                  # print compactization statistics
 contasty --config path.toml src/       # use a specific contasty.toml
 contasty --no-reformat src/            # skip all post-strip reformatting
 ```
+
+Multiple arguments resolve to a deduped, sorted union of source files. A folder is
+walked `.gitignore`-aware; a glob is expanded internally (quote it so the shell
+does not expand or fail on no match), and a glob that matches directories walks
+each matched subtree. A glob matching nothing warns and is skipped; a named path
+that does not exist is an error.
 
 Output defaults to Markdown. Pass `--format=json` for a pretty-printed JSON
 bundle shaped as `{ "base": <dir>, "files": [{ "path", "lang", "content" }] }`,

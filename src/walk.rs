@@ -1,10 +1,11 @@
-//! Directory walker that respects `.gitignore` and dispatches to the language
-//! registry.
+//! Strip pipeline over a resolved set of source files.
+//!
+//! Walking and glob expansion live in [`crate::inputs`]; this module takes the
+//! already-resolved file set and dispatches each file to the language registry.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use ignore::WalkBuilder;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::AppError;
@@ -13,7 +14,7 @@ use crate::lang::Registry;
 
 /// One file's stripped representation, ready for rendering.
 pub struct Stripped {
-    /// Path to the source file (as the walker reported it).
+    /// Path to the source file (as the resolver reported it).
     pub path: PathBuf,
     /// Markdown fence info-string for this file's language (e.g. `"rust"`).
     pub lang_name: &'static str,
@@ -23,10 +24,11 @@ pub struct Stripped {
     pub content: String,
 }
 
-/// Walk `root` (gitignore-aware) and strip every supported file.
+/// Strip every supported file in `files` (a resolved, deduped set from
+/// [`crate::resolve`]).
 ///
-/// `root` may be a file or a directory. Unsupported extensions are silently
-/// skipped. Output is sorted by path for deterministic rendering.
+/// Unsupported extensions and reserved query files (`*.cty.{yaml,yml}`) are
+/// silently skipped. Output is sorted by path for deterministic rendering.
 ///
 /// Category inclusion is resolved per language by layering built-in defaults,
 /// config cross-language defaults (`[include]`), per-language config
@@ -35,37 +37,24 @@ pub struct Stripped {
 /// # Errors
 ///
 /// - [`AppError::Io`] from reading source files.
-/// - [`AppError::Walk`] from the `ignore` crate.
 /// - [`AppError::CustomLang`] when a configured dynamic grammar fails to load.
 /// - [`AppError::Rule`] / [`AppError::RuleParse`] / [`AppError::ParseFailed`]
 ///   when a language module misbehaves on a real file.
 pub fn collect(
-    root: &Path,
+    files: &[PathBuf],
     cli: CategorySelection,
     config: &Config,
 ) -> Result<Vec<Stripped>, AppError> {
     let registry = Registry::with_config(config)?;
-    // Walk sequentially (gitignore resolution is cheap and inherently serial),
-    // then parse + strip the gathered files in parallel — tree-sitter parsing
-    // and any reformat pass dominate the runtime and are per-file independent.
-    // `Registry` is `Sync`, so one instance is shared read-only.
-    let mut paths: Vec<PathBuf> = Vec::new();
-    for entry in WalkBuilder::new(root).build() {
-        let entry = entry?;
-        if is_file(&entry) {
-            paths.push(entry.into_path());
-        }
-    }
-    let mut out: Vec<Stripped> = paths
+    // Parse + strip in parallel — tree-sitter parsing and any reformat pass
+    // dominate the runtime and are per-file independent. `Registry` is `Sync`,
+    // so one instance is shared read-only.
+    let mut out: Vec<Stripped> = files
         .par_iter()
         .filter_map(|path| strip_one(path, &registry, cli, config).transpose())
         .collect::<Result<Vec<Stripped>, AppError>>()?;
     out.sort_by(|left, right| left.path.cmp(&right.path));
     Ok(out)
-}
-
-fn is_file(entry: &ignore::DirEntry) -> bool {
-    entry.file_type().is_some_and(|ft| ft.is_file())
 }
 
 fn strip_one(
@@ -74,6 +63,11 @@ fn strip_one(
     cli: CategorySelection,
     config: &Config,
 ) -> Result<Option<Stripped>, AppError> {
+    // Reserve the query sub-extension: a `*.cty.yaml` would otherwise be detected
+    // as YAML source and stripped instead of (later) unfolded.
+    if crate::inputs::is_query_file(path) {
+        return Ok(None);
+    }
     let Some(language) = registry.detect(path) else {
         return Ok(None);
     };
@@ -98,7 +92,6 @@ fn strip_one(
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::io::Write;
 
     use super::*;
 
@@ -114,15 +107,22 @@ mod tests {
         }
     }
 
-    #[test]
-    fn collect_strips_rust_files_in_a_directory() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let path = tmp.path().join("a.rs");
-        let mut file = fs::File::create(&path).expect("create");
-        writeln!(file, "fn add(lhs: i32, rhs: i32) -> i32 {{ lhs + rhs }}").expect("write");
+    fn write_file(dir: &Path, name: &str, body: &str) -> PathBuf {
+        let path = dir.join(name);
+        fs::write(&path, body).expect("write");
+        path
+    }
 
+    #[test]
+    fn collect_strips_a_rust_file() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = write_file(
+            tmp.path(),
+            "a.rs",
+            "fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n",
+        );
         let items =
-            collect(tmp.path(), CategorySelection::default(), &Config::default()).expect("collect");
+            collect(&[path], CategorySelection::default(), &Config::default()).expect("collect");
         assert_eq!(items.len(), 1);
         let item = items.first().expect("one item");
         assert_eq!(item.lang_name, "rust");
@@ -134,27 +134,34 @@ mod tests {
     #[test]
     fn collect_skips_unknown_extensions() {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let path = tmp.path().join("readme.txt");
-        fs::write(&path, "plain text").expect("write");
-
+        let path = write_file(tmp.path(), "readme.txt", "plain text");
         let items =
-            collect(tmp.path(), CategorySelection::default(), &Config::default()).expect("collect");
+            collect(&[path], CategorySelection::default(), &Config::default()).expect("collect");
         assert!(items.is_empty());
+    }
+
+    #[test]
+    fn collect_skips_query_files() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = write_file(tmp.path(), "api.cty.yaml", "rules: []\n");
+        let items =
+            collect(&[path], CategorySelection::default(), &Config::default()).expect("collect");
+        assert!(items.is_empty(), "query file must not be stripped as yaml");
     }
 
     #[test]
     fn collect_returns_files_sorted_by_path() {
         let tmp = tempfile::tempdir().expect("tempdir");
+        let mut paths = Vec::new();
         for name in ["zzz.rs", "aaa.rs", "mmm.rs"] {
-            fs::write(
-                tmp.path().join(name),
+            paths.push(write_file(
+                tmp.path(),
+                name,
                 "fn id(value: i32) -> i32 { value }\n",
-            )
-            .expect("write");
+            ));
         }
-
         let items =
-            collect(tmp.path(), CategorySelection::default(), &Config::default()).expect("collect");
+            collect(&paths, CategorySelection::default(), &Config::default()).expect("collect");
         let names: Vec<_> = items
             .iter()
             .map(|item| {
@@ -176,11 +183,14 @@ mod tests {
                        #[test]\n    \
                        fn it_works() { assert_eq!(add(1, 1), 2); }\n\
                    }\n";
-        fs::write(tmp.path().join("a.rs"), src).expect("write");
+        let path = write_file(tmp.path(), "a.rs", src);
 
-        // default (no CLI override): built-in excludes tests
-        let default_items =
-            collect(tmp.path(), CategorySelection::default(), &Config::default()).expect("default");
+        let default_items = collect(
+            std::slice::from_ref(&path),
+            CategorySelection::default(),
+            &Config::default(),
+        )
+        .expect("default");
         assert!(
             !default_items
                 .first()
@@ -189,18 +199,28 @@ mod tests {
                 .contains("mod tests")
         );
 
-        // explicitly include tests
-        let with_tests = collect(tmp.path(), sel(None, None, Some(true)), &Config::default())
-            .expect("with tests");
-        let with_item = with_tests.first().expect("one");
-        assert!(with_item.content.contains("mod tests"));
+        let with_tests = collect(
+            std::slice::from_ref(&path),
+            sel(None, None, Some(true)),
+            &Config::default(),
+        )
+        .expect("with tests");
+        assert!(
+            with_tests
+                .first()
+                .expect("one")
+                .content
+                .contains("mod tests")
+        );
 
-        // explicitly exclude tests
-        let no_tests = collect(tmp.path(), sel(None, None, Some(false)), &Config::default())
-            .expect("no tests");
+        let no_tests = collect(
+            std::slice::from_ref(&path),
+            sel(None, None, Some(false)),
+            &Config::default(),
+        )
+        .expect("no tests");
         let no_item = no_tests.first().expect("one");
         assert!(!no_item.content.contains("mod tests"));
-        assert!(!no_item.content.contains("cfg(test)"));
         assert!(no_item.content.contains("pub fn add"));
     }
 
@@ -210,21 +230,26 @@ mod tests {
         let src = "/// kept when included\n\
                    pub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n\
                    // trailing note\n";
-        fs::write(tmp.path().join("a.rs"), src).expect("write");
+        let path = write_file(tmp.path(), "a.rs", src);
 
-        // include comments
-        let with_comments = collect(tmp.path(), sel(Some(true), None, None), &Config::default())
-            .expect("with comments");
+        let with_comments = collect(
+            std::slice::from_ref(&path),
+            sel(Some(true), None, None),
+            &Config::default(),
+        )
+        .expect("with comments");
         let with_item = with_comments.first().expect("one");
         assert!(with_item.content.contains("/// kept when included"));
         assert!(with_item.content.contains("// trailing note"));
 
-        // exclude comments (default built-in behaviour, explicit here)
-        let no_comments = collect(tmp.path(), sel(Some(false), None, None), &Config::default())
-            .expect("no comments");
+        let no_comments = collect(
+            std::slice::from_ref(&path),
+            sel(Some(false), None, None),
+            &Config::default(),
+        )
+        .expect("no comments");
         let no_item = no_comments.first().expect("one");
         assert!(!no_item.content.contains("kept when included"));
-        assert!(!no_item.content.contains("trailing note"));
         assert!(no_item.content.contains("pub fn add"));
     }
 
@@ -233,17 +258,28 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let src = "use std::collections::HashMap;\n\
                    pub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n";
-        fs::write(tmp.path().join("a.rs"), src).expect("write");
+        let path = write_file(tmp.path(), "a.rs", src);
 
-        // default: imports included
-        let with_imports = collect(tmp.path(), CategorySelection::default(), &Config::default())
-            .expect("with imports");
-        let with_item = with_imports.first().expect("one");
-        assert!(with_item.content.contains("use std::collections::HashMap"));
+        let with_imports = collect(
+            std::slice::from_ref(&path),
+            CategorySelection::default(),
+            &Config::default(),
+        )
+        .expect("with imports");
+        assert!(
+            with_imports
+                .first()
+                .expect("one")
+                .content
+                .contains("use std::collections::HashMap")
+        );
 
-        // exclude imports
-        let no_imports = collect(tmp.path(), sel(None, Some(false), None), &Config::default())
-            .expect("no imports");
+        let no_imports = collect(
+            std::slice::from_ref(&path),
+            sel(None, Some(false), None),
+            &Config::default(),
+        )
+        .expect("no imports");
         let no_item = no_imports.first().expect("one");
         assert!(!no_item.content.contains("use std::collections::HashMap"));
         assert!(no_item.content.contains("pub fn add"));

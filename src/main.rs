@@ -35,9 +35,12 @@ enum Selector {
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
-    /// Directory or file to process. Walks `.gitignore`-aware.
-    #[arg(default_value = ".")]
-    path: PathBuf,
+    /// Files, directories, or globs to process (repeatable). Each unfolds to a
+    /// set of source files; the deduped union is stripped. Folders are walked
+    /// `.gitignore`-aware; globs are expanded internally (quote them so the shell
+    /// does not). Defaults to the current directory.
+    #[arg(value_name = "PATH")]
+    paths: Vec<PathBuf>,
 
     /// Include a category in the output (repeatable). Selectors: comments,
     /// imports, tests, all (alias: everything). Applied left-to-right with
@@ -121,7 +124,8 @@ fn main() -> Result<()> {
     let mut config = Config::load(cli.config.as_deref(), &cwd);
     config.no_reformat = cli.no_reformat;
     let override_sel = cli_override(&ordered_selectors(&m));
-    let items = contasty::collect(&cli.path, override_sel, &config)?;
+    let files = contasty::resolve(&cli.paths)?;
+    let items = contasty::collect(&files, override_sel, &config)?;
     if cli.stats {
         let report = contasty::stats::compute(&items);
         print!("{report}");
