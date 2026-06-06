@@ -3,125 +3,658 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>contasty — strip code into tasty LLM context</title>
-  <meta name="description" content="contasty strips executable lines from your code, keeping declarations and signatures, to prepare tasty context for your agent.">
+  <title>contasty — context is tasty</title>
+  <meta name="description" content="contasty strips executable lines from your code — bodies out, signatures in — reducing a repo to a sweet, tasty context bundle for your LLM agent.">
+  <meta name="color-scheme" content="light dark">
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+  <meta property="og:title" content="contasty — context is tasty">
+  <meta property="og:description" content="Reduce your repo to a syrup of signatures. 27 languages, single static binary.">
+  <meta property="og:type" content="website">
   <style>
     :root {
-      --amber: #FF7A18;
-      --amber-soft: #FFB347;
-      --ink: #1c1917;
-      --muted: #6b6862;
-      --bg: #fffdfa;
-      --card: #f7f4ef;
-      --line: #ece7df;
+      /* sweet palette — caramel kitchen */
+      --caramel: #FF7A18;
+      --honey:   #FFB347;
+      --syrup:   #E8590C;
+      --berry:   #E84A5F;   /* removed lines */
+      --mint:    #1FA672;   /* kept lines */
+      --cocoa:   #2B1B12;   /* ink */
+      --cocoa-2: #6B5446;   /* muted */
+      --cream:   #FFF9F0;   /* page */
+      --cream-2: #FFF3E2;   /* card */
+      --icing:   #ffffff;
+      --line:    #F1E3CE;
+      --code-bg: #FFFBF4;
+      --shadow:  0 1px 2px rgba(120,72,20,.06), 0 12px 30px -12px rgba(232,89,12,.22);
+      --shadow-lg: 0 24px 60px -24px rgba(232,89,12,.40);
+      --radius: 16px;
+      --font: "Nunito", ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, sans-serif;
+      --mono: ui-monospace, "JetBrains Mono", "Cascadia Code", SFMono-Regular, Menlo, Consolas, monospace;
+      /* syntax */
+      --syn-kw: var(--syrup);
+      --syn-fn: #B5650A;
+      --syn-ty: #9A6B00;
+      --syn-str: var(--mint);
+      --syn-com: #B9A78E;
+      --syn-punc: #8A7256;
     }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --berry: #FF6B81;
+        --mint: #44D6A0;
+        --cocoa:   #FBEFE0;
+        --cocoa-2: #C7AE95;
+        --cream:   #18110B;
+        --cream-2: #241811;
+        --icing:   #2A1C12;
+        --line:    #3A2A1D;
+        --code-bg: #1E150E;
+        --shadow:  0 1px 2px rgba(0,0,0,.4), 0 14px 34px -14px rgba(0,0,0,.6);
+        --shadow-lg: 0 28px 70px -24px rgba(0,0,0,.7);
+        --syn-kw: var(--honey);
+        --syn-fn: #FFC97A;
+        --syn-ty: #FFD98A;
+        --syn-com: #7C6650;
+        --syn-punc: #B79877;
+      }
+    }
+
     * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      color: var(--ink);
-      background: var(--bg);
-      line-height: 1.6;
       margin: 0;
+      font-family: var(--font);
+      color: var(--cocoa);
+      background: var(--cream);
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
     }
-    .wrap { max-width: 720px; margin: 0 auto; padding: 3.5rem 1.25rem 4rem; }
-    header { text-align: center; }
-    .logo { width: 88px; height: 88px; }
-    h1 { font-size: 2.6rem; margin: 0.6rem 0 0.2rem; letter-spacing: -0.02em; }
-    .tagline { font-size: 1.2rem; color: var(--muted); margin: 0 auto; max-width: 34rem; }
-    .cta { margin: 1.6rem 0 0.5rem; display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
-    a.btn {
-      display: inline-block; padding: 0.55rem 1.1rem; border-radius: 8px;
-      text-decoration: none; font-weight: 600; border: 1px solid var(--line);
+    a { color: var(--syrup); }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 0 1.25rem; }
+    .sectlabel {
+      font-family: var(--mono);
+      font-size: .82rem;
+      letter-spacing: .02em;
+      color: var(--cocoa-2);
+      margin: 0 0 1rem;
     }
-    a.btn.primary { background: var(--amber); color: #fff; border-color: var(--amber); }
-    a.btn.ghost { background: #fff; color: var(--ink); }
-    h2 { font-size: 1.3rem; margin: 2.6rem 0 0.6rem; }
-    p { color: #36322d; }
-    code { background: var(--card); padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.95em; }
-    pre {
-      background: var(--card); border: 1px solid var(--line); border-radius: 10px;
-      padding: 1rem 1.1rem; overflow-x: auto; margin: 0;
+    .sectlabel::before { content: "// "; color: var(--caramel); font-weight: 700; }
+    h2 { font-size: clamp(1.5rem, 3.5vw, 2.1rem); margin: 0 0 .6rem; letter-spacing: -.02em; }
+    section { padding: clamp(3rem, 7vw, 5.5rem) 0; }
+    p { color: var(--cocoa); max-width: 42rem; }
+
+    /* ---------- sprinkles + hero ---------- */
+    .hero {
+      position: relative;
+      text-align: center;
+      padding: clamp(3.5rem, 8vw, 6rem) 0 0;
+      background:
+        radial-gradient(120% 80% at 50% -10%, rgba(255,179,71,.22), transparent 60%),
+        radial-gradient(90% 60% at 90% 0%, rgba(255,122,24,.10), transparent 55%);
+      overflow: hidden;
     }
-    pre code { background: none; padding: 0; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    .grid figcaption { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+    .sprinkles { position: absolute; inset: 0; pointer-events: none; opacity: .55; }
+    .sprinkles i {
+      position: absolute; display: block; width: 14px; height: 5px; border-radius: 3px;
+      will-change: transform;
+    }
+
+    .logo { width: 84px; height: 84px; filter: drop-shadow(0 8px 18px rgba(232,89,12,.30)); }
+    .wordmark {
+      font-size: clamp(2.6rem, 8vw, 4.2rem);
+      font-weight: 900; letter-spacing: -.035em; line-height: 1.3;
+      margin: .5rem 0 .2rem;
+      background: linear-gradient(95deg, var(--syrup), var(--honey) 60%, var(--caramel));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .tagline { font-size: clamp(1.05rem, 2.4vw, 1.3rem); color: var(--cocoa); margin: .2rem auto 0; max-width: 36rem; }
+    .subtag { font-family: var(--mono); font-size: .92rem; color: var(--cocoa-2); margin: .55rem auto 0; }
+    .subtag b { color: var(--syrup); font-weight: 700; }
+
+    .cta { display: flex; gap: .7rem; justify-content: center; flex-wrap: wrap; margin: 1.8rem 0 0; }
+    .btn {
+      --bs: var(--shadow);
+      position: relative; display: inline-flex; align-items: center; gap: .5rem;
+      padding: .7rem 1.3rem; border-radius: 999px; font-weight: 800; font-size: .98rem;
+      text-decoration: none; border: 1px solid var(--line); background: var(--icing); color: var(--cocoa);
+      box-shadow: var(--bs); transition: transform .15s ease, box-shadow .15s ease;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn.candy {
+      color: #fff; border: 0;
+      background: linear-gradient(180deg, var(--honey), var(--caramel));
+      box-shadow: 0 10px 24px -8px rgba(232,89,12,.55), inset 0 1px 0 rgba(255,255,255,.55);
+    }
+    .btn.candy::after {
+      content: ""; position: absolute; inset: 2px 2px 50%; border-radius: 999px;
+      background: linear-gradient(180deg, rgba(255,255,255,.55), transparent); pointer-events: none;
+    }
+    .btn .mono { font-family: var(--mono); font-weight: 700; }
+
+    /* ---------- editor window ---------- */
+    .editor {
+      text-align: left; background: var(--code-bg); border: 1px solid var(--line);
+      border-radius: 18px; box-shadow: var(--shadow-lg); overflow: hidden;
+    }
+    .titlebar {
+      display: flex; align-items: center; gap: .55rem; padding: .7rem 1rem;
+      background: linear-gradient(180deg, var(--cream-2), transparent);
+      border-bottom: 1px solid var(--line);
+    }
+    .gumdrop { width: 13px; height: 13px; border-radius: 50%; box-shadow: inset 0 -2px 3px rgba(0,0,0,.15), inset 0 2px 2px rgba(255,255,255,.5); }
+    .gumdrop.b { background: var(--berry); } .gumdrop.h { background: var(--honey); } .gumdrop.m { background: var(--mint); }
+    .titlebar .name { font-family: var(--mono); font-size: .82rem; color: var(--cocoa-2); margin-left: .4rem; }
+    .titlebar .tag { margin-left: auto; font-family: var(--mono); font-size: .72rem; color: #fff; background: var(--caramel); padding: .1rem .5rem; border-radius: 999px; }
+
+    pre { margin: 0; padding: 1rem 1.1rem; overflow-x: auto; }
+    code, pre, .code { font-family: var(--mono); font-size: .86rem; line-height: 1.7; }
+    .code { padding: 1rem 1.1rem; overflow-x: auto; }
+    .cl { display: grid; grid-template-columns: 2.2ch 1fr; gap: 1rem; }
+    .cl > .n { color: var(--syn-punc); opacity: .55; text-align: right; user-select: none; }
+    .cl > .t { white-space: pre; }
+    .kw { color: var(--syn-kw); } .fn { color: var(--syn-fn); } .ty { color: var(--syn-ty); }
+    .st { color: var(--syn-str); } .cm { color: var(--syn-com); font-style: italic; } .pu { color: var(--syn-punc); }
+
+    /* hero reduction animation */
+    .hero-editor { max-width: 640px; margin: 2.4rem auto -2.5rem; position: relative; z-index: 2; }
+    @keyframes reduce {
+      0%, 18%   { max-height: 1.7em; opacity: 1; filter: blur(0); transform: translateY(0); }
+      42%, 78%  { max-height: 0; opacity: 0; filter: blur(3px); transform: translateY(-6px); }
+      100%      { max-height: 1.7em; opacity: 1; filter: blur(0); transform: translateY(0); }
+    }
+    @keyframes brace {
+      0%,18% { opacity: 0; } 50%,78% { opacity: 1; } 100% { opacity: 0; }
+    }
+    .hero-editor .cl.body { overflow: hidden; max-height: 1.7em; animation: reduce 6s ease-in-out infinite; }
+    .hero-editor .closed { opacity: 0; animation: brace 6s ease-in-out infinite; }
+    .drip {
+      position: absolute; left: 50%; bottom: -10px; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--caramel); opacity: 0; animation: drop 6s ease-in-out infinite;
+    }
+    @keyframes drop {
+      0%,40% { opacity: 0; transform: translateY(0) scale(.6); }
+      55% { opacity: .9; transform: translateY(0) scale(1); }
+      80% { opacity: .9; transform: translateY(34px) scale(.9); }
+      85%,100% { opacity: 0; transform: translateY(40px) scale(.4); }
+    }
+
+    /* ---------- icing drip divider ---------- */
+    .drip-div { display: block; width: 100%; height: 36px; color: var(--cream-2); margin-top: -1px; }
+
+    /* ---------- what it does grid ---------- */
+    .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: stretch; }
     figure { margin: 0; }
-    .arrow { text-align: center; color: var(--amber); font-weight: 700; }
-    ul.feat { padding-left: 1.1rem; }
-    ul.feat li { margin: 0.25rem 0; }
-    footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--line); text-align: center; color: var(--muted); font-size: 0.95rem; }
-    footer a { color: var(--amber); }
-    @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } h1 { font-size: 2.1rem; } }
+    .cap { font-family: var(--mono); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--cocoa-2); margin: 0 0 .4rem; }
+    .arrow { text-align: center; color: var(--caramel); font-weight: 800; font-family: var(--mono); margin: 1rem 0 0; }
+
+    /* ---------- strip categories (scrollytelling) ---------- */
+    .scrolly { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: start; }
+    .sticky { position: sticky; top: 2rem; }
+    .steps { display: flex; flex-direction: column; gap: 1rem; }
+    .step {
+      background: var(--cream-2); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 1.1rem 1.2rem; box-shadow: var(--shadow); opacity: .55; cursor: pointer;
+      transition: opacity .35s ease, transform .2s ease, border-color .35s ease, box-shadow .2s ease;
+      -webkit-user-select: none; user-select: none;
+    }
+    .step:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+    .step:focus-visible { outline: 2px solid var(--caramel); outline-offset: 2px; }
+    .step.on { opacity: 1; border-color: var(--honey); }
+    .step h3 { margin: 0 0 .25rem; font-size: 1.1rem; display: flex; align-items: center; gap: .5rem; }
+    .pill { font-family: var(--mono); font-size: .72rem; padding: .12rem .5rem; border-radius: 999px; background: var(--caramel); color: #fff; }
+    .pill.kept { background: var(--mint); }
+    .step p { font-size: .92rem; color: var(--cocoa-2); margin: 0; }
+    .skim { transition: opacity .4s ease, filter .4s ease; }
+    .skim.off { opacity: .22; filter: blur(1px); }
+
+    /* ---------- language grid ---------- */
+    .langs { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: .6rem; margin-top: 1.2rem; }
+    .lang {
+      display: flex; align-items: center; gap: .5rem; padding: .55rem .7rem;
+      background: var(--cream-2); border: 1px solid var(--line); border-radius: 12px;
+      font-size: .9rem; font-weight: 700; box-shadow: var(--shadow); transition: transform .12s ease;
+    }
+    .lang:hover { transform: translateY(-2px); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+    .lang.body .dot { background: var(--caramel); box-shadow: 0 0 0 3px rgba(255,122,24,.18); }
+    .lang.lite .dot { background: transparent; border: 2px solid var(--honey); }
+    .legend { display: flex; gap: 1.4rem; flex-wrap: wrap; font-size: .86rem; color: var(--cocoa-2); margin-top: 1.1rem; }
+    .legend span { display: inline-flex; align-items: center; gap: .45rem; }
+
+    /* ---------- nutrition facts ---------- */
+    .nutri-row { display: grid; grid-template-columns: 1.2fr 1fr; gap: 2rem; align-items: center; }
+    .nutri {
+      max-width: 340px; background: var(--icing); border: 3px solid var(--cocoa);
+      border-radius: 10px; padding: .9rem 1.1rem; font-family: var(--mono); box-shadow: var(--shadow-lg);
+    }
+    .nutri h3 { margin: 0; font-size: 1.6rem; font-weight: 900; letter-spacing: -.02em; font-family: var(--font); border-bottom: 8px solid var(--cocoa); padding-bottom: .3rem; }
+    .nutri .sub { font-size: .78rem; color: var(--cocoa-2); border-bottom: 1px solid var(--cocoa); padding: .3rem 0; }
+    .nutri .nr { display: flex; justify-content: space-between; padding: .3rem 0; border-bottom: 1px solid var(--line); font-size: .9rem; }
+    .nutri .nr b { font-weight: 800; }
+    .nutri .big { font-size: 1.05rem; border-bottom: 4px solid var(--cocoa); border-top: 4px solid var(--cocoa); }
+    .nutri .win { color: var(--mint); font-weight: 900; }
+    .nutri .note { font-size: .72rem; color: var(--cocoa-2); margin-top: .5rem; line-height: 1.4; }
+
+    /* ---------- features pantry ---------- */
+    .pantry { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 1.2rem; }
+    .jar {
+      background: var(--cream-2); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 1.2rem 1.3rem; box-shadow: var(--shadow); transition: transform .15s ease, box-shadow .15s ease;
+    }
+    .jar:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+    .jar h3 { margin: 0 0 .3rem; font-size: 1.08rem; }
+    .jar p { font-size: .9rem; color: var(--cocoa-2); margin: 0 0 .5rem; }
+    .jar a { font-family: var(--mono); font-size: .8rem; font-weight: 700; text-decoration: none; }
+    .jar a:hover { text-decoration: underline; }
+    .emoji { font-size: 1.4rem; }
+
+    /* ---------- comparison ---------- */
+    table.cmp { width: 100%; border-collapse: collapse; margin-top: 1.1rem; font-size: .92rem; }
+    table.cmp th, table.cmp td { text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--line); }
+    table.cmp thead th { font-family: var(--mono); font-size: .8rem; color: var(--cocoa-2); }
+    table.cmp tbody td:first-child { color: var(--cocoa-2); }
+    table.cmp .y { color: var(--mint); font-weight: 800; }
+    table.cmp .n { color: var(--cocoa-2); }
+    table.cmp tbody tr:hover { background: var(--cream-2); }
+
+    /* ---------- install ---------- */
+    .install pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+
+    footer {
+      text-align: center; color: var(--cocoa-2); font-size: .92rem;
+      padding: 2.5rem 1.25rem 3.5rem; border-top: 1px solid var(--line); margin-top: 2rem;
+    }
+    footer a { color: var(--syrup); text-decoration: none; font-weight: 700; }
+    footer p { max-width: none; margin: .4rem auto; }
+
+    @media (max-width: 720px) {
+      .twocol, .scrolly, .nutri-row { grid-template-columns: 1fr; }
+      .sticky { position: static; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .sprinkles i, .drip { animation: none; }
+      .hero-editor .cl.body { animation: none; max-height: 0; opacity: 0; overflow: hidden; }
+      .hero-editor .closed { animation: none; opacity: 1; }
+      .skim.off { transition: none; }
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <img class="logo" src="./logo.svg" width="88" height="88" alt="contasty logo">
-      <h1>contasty</h1>
+
+  <!-- ============ HERO ============ -->
+  <header class="hero">
+    <div class="sprinkles" aria-hidden="true"></div>
+    <div class="wrap">
+      <img class="logo" src="./logo.svg" width="84" height="84" alt="contasty logo: braces hugging compacting code lines">
+      <h1 class="wordmark">contasty</h1>
       <p class="tagline">Strips executable lines from your code to prepare tasty context for your agent.</p>
-      <div class="cta">
-        <a class="btn primary" href="https://github.com/mlavrinenko/contasty">GitHub</a>
-        <a class="btn ghost" href="https://crates.io/crates/contasty">crates.io</a>
-        <a class="btn ghost" href="https://github.com/mlavrinenko/contasty/blob/main/docs/languages.md">Docs</a>
+      <p class="subtag"><b>context</b> is <b>tasty</b> — reduce your repo to a syrup of signatures.</p>
+      <nav class="cta">
+        <a class="btn candy" href="#install"><span class="mono">install</span></a>
+        <a class="btn" href="https://github.com/mlavrinenko/contasty">GitHub</a>
+        <a class="btn" href="https://crates.io/crates/contasty">crates.io</a>
+        <a class="btn" href="https://github.com/mlavrinenko/contasty/blob/main/docs/languages.md">Docs</a>
+      </nav>
+
+      <!-- hero reduction: bodies melt away on a loop -->
+      <div class="hero-editor">
+        <div class="editor">
+          <div class="titlebar">
+            <span class="gumdrop b"></span><span class="gumdrop h"></span><span class="gumdrop m"></span>
+            <span class="name">checkout.rs</span><span class="tag">contasty</span>
+          </div>
+          <div class="code"><div class="cl"><span class="n">1</span><span class="t"><span class="kw">pub fn</span> <span class="fn">checkout</span>(cart: <span class="ty">&amp;Cart</span>, user: <span class="ty">&amp;User</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Receipt</span>&gt; {<span class="closed pu">}</span></span></div><div class="cl body"><span class="n">2</span><span class="t">    <span class="kw">let</span> total = cart.total();</span></div><div class="cl body"><span class="n">3</span><span class="t">    <span class="fn">charge</span>(user, total)?;</span></div><div class="cl body"><span class="n">4</span><span class="t">    <span class="ty">Ok</span>(<span class="ty">Receipt</span>::new(total))</span></div><div class="cl body"><span class="n">5</span><span class="t"><span class="pu">}</span></span></div></div>
+        </div>
+        <span class="drip" aria-hidden="true"></span>
       </div>
-    </header>
-
-    <h2>What it does</h2>
-    <p>
-      contasty walks a directory (respecting <code>.gitignore</code>), parses
-      each supported source file with <a href="https://ast-grep.github.io/">ast-grep</a>,
-      and elides function bodies, constant values, and long strings — keeping
-      declarations, signatures, and types intact. The result is a single
-      Markdown (or JSON) bundle, ready to paste into an LLM context window.
-    </p>
-
-    <h2>Before / after</h2>
-    <div class="grid">
-      <figure>
-        <figcaption>your source</figcaption>
-        <pre><code>pub fn checkout(
-    cart: &amp;Cart,
-    user: &amp;User,
-) -&gt; Result&lt;Receipt&gt; {
-    let total = cart.total();
-    charge(user, total)?;
-    Ok(Receipt::new(total))
-}</code></pre>
-      </figure>
-      <figure>
-        <figcaption>contasty output</figcaption>
-        <pre><code>pub fn checkout(
-    cart: &amp;Cart,
-    user: &amp;User,
-) -&gt; Result&lt;Receipt&gt; {}</code></pre>
-      </figure>
     </div>
-    <p class="arrow">↓ signatures stay, bodies go ↓</p>
+    <svg class="drip-div" viewBox="0 0 1200 36" preserveAspectRatio="none" aria-hidden="true">
+      <path fill="currentColor" d="M0 0h1200v14c-40 0-40 16-80 16s-40-16-80-16-40 16-80 16-40-16-80-16-40 16-80 16-40-16-80-16-40 16-80 16-40-16-80-16-40 16-80 16-40-16-80-16-40 16-80 16-40-16-80-16-40 16-80 16-40-16-80-16-40 16-80 16-40-16-80-16V0z"/>
+    </svg>
+  </header>
 
-    <h2>Install</h2>
-    <pre><code>cargo install contasty</code></pre>
+  <main>
+    <!-- ============ WHAT IT DOES ============ -->
+    <section style="background:var(--cream-2)">
+      <div class="wrap">
+        <p class="sectlabel">what it does</p>
+        <h2>Bodies out. Signatures in.</h2>
+        <p>
+          contasty walks a directory (respecting <code>.gitignore</code>), parses each supported
+          source file with <a href="https://ast-grep.github.io/">ast-grep</a>, and elides function
+          bodies, constant values, and long strings — keeping declarations, signatures, and types
+          intact. The result is one Markdown (or JSON) bundle, ready to paste into an LLM context window.
+        </p>
+        <div class="twocol" style="margin-top:1.4rem">
+          <figure>
+            <p class="cap">your source</p>
+            <div class="editor"><pre><code><span class="cm">use crate::cart::Cart;</span>
+<span class="cm">/// Charge the user, emit a receipt.</span>
+<span class="kw">pub fn</span> <span class="fn">checkout</span>(c: <span class="ty">&amp;Cart</span>) -&gt; <span class="ty">Receipt</span> {
+    <span class="kw">let</span> t = c.total();
+    <span class="fn">charge</span>(t)?;
+    <span class="ty">Receipt</span>::new(t)
+}</code></pre></div>
+          </figure>
+          <figure>
+            <p class="cap">contasty output</p>
+            <div class="editor"><pre><code><span class="kw">pub fn</span> <span class="fn">checkout</span>(c: <span class="ty">&amp;Cart</span>) -&gt; <span class="ty">Receipt</span> {}
+
+
+
+</code></pre></div>
+          </figure>
+        </div>
+        <p class="arrow">↓ comments &amp; imports gone, body reduced, signature kept ↓</p>
+      </div>
+    </section>
+
+    <!-- ============ STRIP CATEGORIES (scrollytelling) ============ -->
+    <section>
+      <div class="wrap">
+        <p class="sectlabel">reduce to taste</p>
+        <h2>Four ingredients you can leave out</h2>
+        <p>
+          <code>--strip</code> picks what to remove, per path, find-style. Comments, imports, and
+          bodies go by default; test signatures stay. Scroll to watch each category get skimmed off.
+        </p>
+        <div class="scrolly" style="margin-top:1.6rem">
+          <div class="sticky">
+            <div class="editor">
+              <div class="titlebar">
+                <span class="gumdrop b"></span><span class="gumdrop h"></span><span class="gumdrop m"></span>
+                <span class="name">service.rs</span>
+              </div>
+              <pre><code><span data-cat="imports" class="skim cm">use crate::db::Pool;</span>
+<span data-cat="comments" class="skim cm">// open a pooled connection</span>
+<span class="kw">pub fn</span> <span class="fn">connect</span>(p: <span class="ty">&amp;Pool</span>) -&gt; <span class="ty">Conn</span> {<span data-cat="body" class="skim">
+    <span class="kw">let</span> c = p.acquire();
+    c.ping()?;
+    c</span>}
+
+<span class="pu">#[cfg(test)]</span>
+<span data-cat="tests" class="skim"><span class="kw">mod</span> <span class="ty">tests</span> {
+    <span class="pu">#[test]</span>
+    <span class="kw">fn</span> <span class="fn">pings</span>() {}
+}</span></code></pre>
+            </div>
+          </div>
+          <div class="steps">
+            <div class="step" data-step="comments">
+              <h3><span class="pill">comments</span> stripped by default</h3>
+              <p>Doc and line comments dropped. Re-add with <code>--strip=!comments</code>.</p>
+            </div>
+            <div class="step" data-step="imports">
+              <h3><span class="pill">imports</span> stripped by default</h3>
+              <p>Use / import / require lines removed — the indentation goes too, no blank stub.</p>
+            </div>
+            <div class="step" data-step="body">
+              <h3><span class="pill">body</span> stripped by default</h3>
+              <p>Function, method, and closure bodies elided to an empty <code>{}</code> — still reparseable.</p>
+            </div>
+            <div class="step" data-step="tests">
+              <h3><span class="pill kept">tests</span> kept by default</h3>
+              <p>Test signatures stay so the agent sees intent. Drop them with <code>--strip=tests</code>.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ LANGUAGES ============ -->
+    <section style="background:var(--cream-2)">
+      <div class="wrap">
+        <p class="sectlabel">27 flavors</p>
+        <h2>Every grammar ast-grep bundles, except Markdown</h2>
+        <p>
+          Each language is data, not code: a YAML ast-grep rule file matched against the tree.
+          18 do full body elision; the rest strip comments, imports, long strings, and values.
+        </p>
+        <div class="langs">
+          <div class="lang body"><span class="dot"></span>Rust</div>
+          <div class="lang body"><span class="dot"></span>PHP</div>
+          <div class="lang body"><span class="dot"></span>TypeScript</div>
+          <div class="lang body"><span class="dot"></span>TSX</div>
+          <div class="lang body"><span class="dot"></span>JavaScript</div>
+          <div class="lang body"><span class="dot"></span>Python</div>
+          <div class="lang body"><span class="dot"></span>Go</div>
+          <div class="lang body"><span class="dot"></span>Java</div>
+          <div class="lang body"><span class="dot"></span>C#</div>
+          <div class="lang body"><span class="dot"></span>Ruby</div>
+          <div class="lang body"><span class="dot"></span>C++</div>
+          <div class="lang body"><span class="dot"></span>C</div>
+          <div class="lang body"><span class="dot"></span>Kotlin</div>
+          <div class="lang body"><span class="dot"></span>Swift</div>
+          <div class="lang body"><span class="dot"></span>Scala</div>
+          <div class="lang body"><span class="dot"></span>Dart</div>
+          <div class="lang body"><span class="dot"></span>Solidity</div>
+          <div class="lang body"><span class="dot"></span>HTML</div>
+          <div class="lang lite"><span class="dot"></span>Bash</div>
+          <div class="lang lite"><span class="dot"></span>Lua</div>
+          <div class="lang lite"><span class="dot"></span>Elixir</div>
+          <div class="lang lite"><span class="dot"></span>Haskell</div>
+          <div class="lang lite"><span class="dot"></span>Nix</div>
+          <div class="lang lite"><span class="dot"></span>JSON</div>
+          <div class="lang lite"><span class="dot"></span>YAML</div>
+          <div class="lang lite"><span class="dot"></span>CSS</div>
+          <div class="lang lite"><span class="dot"></span>HCL</div>
+        </div>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--caramel);box-shadow:0 0 0 3px rgba(255,122,24,.18)"></span> body elision (18)</span>
+          <span><span class="dot" style="background:transparent;border:2px solid var(--honey)"></span> comments / imports / strings (9)</span>
+        </div>
+        <p style="margin-top:1.1rem;font-size:.92rem;color:var(--cocoa-2)">
+          Need another? Add a language with a compiled <code>.so</code> tree-sitter grammar plus a rule
+          file — <a href="https://github.com/mlavrinenko/contasty/blob/main/docs/languages.md">no rebuild</a>.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ NUTRITION FACTS (--stats) ============ -->
+    <section>
+      <div class="wrap">
+        <p class="sectlabel">context facts</p>
+        <h2>See the reduction</h2>
+        <div class="nutri-row" style="margin-top:1.2rem">
+          <div>
+            <p>
+              <code>contasty --stats</code> reports original-vs-compacted line counts and a rough
+              token figure instead of the bundle. Fewer tokens, same shape — the agent still sees
+              every signature and type.
+            </p>
+            <div class="install"><pre><code>contasty --stats src/</code></pre></div>
+          </div>
+          <div class="nutri" role="img" aria-label="Example stats: total lines 412 reduced to 108, about 74 percent lighter">
+            <h3>Context Facts</h3>
+            <p class="sub">per <code>src/</code> directory · example run</p>
+            <div class="nr"><span>code</span><span><b>318 → 96</b></span></div>
+            <div class="nr"><span>comments</span><span><b>54 → 0</b></span></div>
+            <div class="nr"><span>blanks</span><span><b>40 → 12</b></span></div>
+            <div class="nr big"><span><b>total lines</b></span><span class="win">412 → 108</span></div>
+            <div class="nr"><span>~tokens</span><span class="win"><b>5.1k → 1.3k</b></span></div>
+            <p class="note">~tokens is a dependency-free estimate (~bytes ÷ 4), not a model tokenizer count. Use it for relative comparison.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ INSTALL ============ -->
+    <section id="install" style="background:var(--cream-2)">
+      <div class="wrap install">
+        <p class="sectlabel">get a taste</p>
+        <h2>Install</h2>
+        <pre><code><span class="cm"># from crates.io</span>
+cargo install contasty
+
+<span class="cm"># with nix — run without installing, or add it to your profile</span>
+nix run github:mlavrinenko/contasty -- src/
+nix profile install github:mlavrinenko/contasty
+
+<span class="cm"># strip a tree, write Markdown context</span>
+contasty src/ &gt; context.md
+
+<span class="cm"># default-strip src/, keep tests/ whole, JSON output</span>
+contasty src/ --strip=none tests/ --format=json</code></pre>
+        <p style="margin-top:.9rem">
+          Or grab a pre-built binary from the
+          <a href="https://github.com/mlavrinenko/contasty/releases/latest">latest release</a>.
+          Single static binary — no Node, no runtime.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ TASTE TEST (comparison) ============ -->
+    <section>
+      <div class="wrap">
+        <p class="sectlabel">taste test</p>
+        <h2>contasty vs repomix --compress</h2>
+        <p>Same idea — walk, elide, print one document. Different strengths.</p>
+        <table class="cmp">
+          <thead><tr><th></th><th>contasty</th><th>repomix --compress</th></tr></thead>
+          <tbody>
+            <tr><td>Languages with body elision</td><td class="y">18 of 27 built-ins</td><td>16</td></tr>
+            <tr><td>Add a language, no rebuild</td><td class="y">yes</td><td class="n">no</td></tr>
+            <tr><td>Extend / override strip rules</td><td class="y">yes</td><td class="n">no</td></tr>
+            <tr><td>Gate comments / imports / tests / body</td><td class="y">yes</td><td class="n">partial</td></tr>
+            <tr><td>Optional reformat of result</td><td class="y">yes</td><td class="n">no</td></tr>
+            <tr><td>Runtime</td><td class="y">single static binary</td><td class="n">Node.js</td></tr>
+            <tr><td>Token counting</td><td class="n">no (by design)</td><td class="y">yes, multi-tokenizer</td></tr>
+            <tr><td>Remote repos / MCP server</td><td class="n">no</td><td class="y">yes</td></tr>
+          </tbody>
+        </table>
+        <p style="margin-top:.9rem;font-size:.9rem;color:var(--cocoa-2)">
+          Full table, plus ctx / aider repo-map comparisons, in the
+          <a href="https://github.com/mlavrinenko/contasty#how-it-compares">README</a>.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ PANTRY (features) ============ -->
+    <section style="background:var(--cream-2)">
+      <div class="wrap">
+        <p class="sectlabel">the pantry</p>
+        <h2>More to taste</h2>
+        <div class="pantry">
+          <div class="jar">
+            <div class="emoji" aria-hidden="true">🍯</div>
+            <h3>Query files</h3>
+            <p>Saved, reusable <code>*.cty.yaml</code> selectors in gitignore syntax — import &amp; union scopes.</p>
+            <a href="https://github.com/mlavrinenko/contasty/blob/main/docs/queries.md">docs/queries.md →</a>
+          </div>
+          <div class="jar">
+            <div class="emoji" aria-hidden="true">🧁</div>
+            <h3>Custom rules</h3>
+            <p>Extend or override any language's strip rules from <code>contasty.toml</code>.</p>
+            <a href="https://github.com/mlavrinenko/contasty/blob/main/docs/custom-rules.md">docs/custom-rules.md →</a>
+          </div>
+          <div class="jar">
+            <div class="emoji" aria-hidden="true">🍩</div>
+            <h3>Dynamic grammars</h3>
+            <p>Bring a compiled <code>.so</code> tree-sitter grammar for a language ast-grep doesn't bundle.</p>
+            <a href="https://github.com/mlavrinenko/contasty/blob/main/docs/languages.md">docs/languages.md →</a>
+          </div>
+          <div class="jar">
+            <div class="emoji" aria-hidden="true">🍮</div>
+            <h3>Reformatting</h3>
+            <p>Optional cosmetic tidy of the stripped output via embedded Topiary or a shell-out.</p>
+            <a href="https://github.com/mlavrinenko/contasty/blob/main/docs/reformatting.md">docs/reformatting.md →</a>
+          </div>
+          <div class="jar">
+            <div class="emoji" aria-hidden="true">🍬</div>
+            <h3>Markdown or JSON</h3>
+            <p><code>--format=json</code> emits <code>{ base, files: [{ path, lang, content }] }</code>.</p>
+            <a href="https://github.com/mlavrinenko/contasty#usage">usage →</a>
+          </div>
+          <div class="jar">
+            <div class="emoji" aria-hidden="true">🍪</div>
+            <h3>.gitignore modes</h3>
+            <p><code>--ignore=enable|disable|reverse</code>, per path — include ignored files or only them.</p>
+            <a href="https://github.com/mlavrinenko/contasty#usage">usage →</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
     <p>
-      Or download a pre-built binary from the
-      <a href="https://github.com/mlavrinenko/contasty/releases/latest">latest release</a>.
+      <a href="https://github.com/mlavrinenko/contasty">GitHub</a> ·
+      <a href="https://crates.io/crates/contasty">crates.io</a> ·
+      <a href="https://github.com/mlavrinenko/contasty/blob/main/docs/custom-rules.md">Custom rules</a> ·
+      MIT licensed
     </p>
+    <p style="opacity:.7">context is tasty 🍯</p>
+  </footer>
 
-    <h2>Highlights</h2>
-    <ul class="feat">
-      <li>Built-in Rust and PHP, driven by YAML ast-grep rule files.</li>
-      <li>Add a language with a dynamic <code>.so</code> grammar — no rebuild.</li>
-      <li>Extend or override any language's rules from <code>contasty.toml</code>.</li>
-      <li>Markdown or JSON output; drop tests, comments, and imports on demand.</li>
-    </ul>
+  <script>
+    var REDUCE = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    <footer>
-      <p>
-        <a href="https://github.com/mlavrinenko/contasty">GitHub</a> ·
-        <a href="https://github.com/mlavrinenko/contasty/blob/main/docs/custom-rules.md">Custom rules</a> ·
-        MIT licensed
-      </p>
-    </footer>
-  </div>
+    // Sprinkles drift gently around the hero (organic, JS-driven).
+    (function () {
+      var box = document.querySelector('.sprinkles');
+      if (!box) return;
+      var colors = ['var(--berry)', 'var(--mint)', 'var(--honey)', 'var(--caramel)'];
+      var items = [], N = 12;
+      for (var i = 0; i < N; i++) {
+        var s = document.createElement('i');
+        var rot = Math.round(Math.random() * 180 - 90);
+        s.style.background = colors[i % colors.length];
+        s.style.left = (Math.random() * 92 + 2) + '%';
+        s.style.top = (Math.random() * 78 + 4) + '%';
+        box.appendChild(s);
+        if (REDUCE) { s.style.transform = 'rotate(' + rot + 'deg)'; continue; }
+        items.push({
+          el: s, rot: rot,
+          ax: 8 + Math.random() * 16, ay: 8 + Math.random() * 18,
+          px: Math.random() * 6.28, py: Math.random() * 6.28,
+          sx: 0.4 + Math.random() * 0.5, sy: 0.4 + Math.random() * 0.5,
+          sr: 6 + Math.random() * 10
+        });
+      }
+      if (REDUCE) return;
+      function frame(t) {
+        var s = t / 1000;
+        for (var i = 0; i < items.length; i++) {
+          var o = items[i];
+          var dx = Math.sin(s * o.sx + o.px) * o.ax;
+          var dy = Math.cos(s * o.sy + o.py) * o.ay;
+          var dr = o.rot + Math.sin(s * 0.4 + o.px) * o.sr;
+          o.el.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px) rotate(' + dr.toFixed(1) + 'deg)';
+        }
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    })();
+
+    // Strip categories: click a step to toggle its category on service.rs.
+    (function () {
+      var steps = Array.prototype.slice.call(document.querySelectorAll('.step'));
+      var targets = Array.prototype.slice.call(document.querySelectorAll('[data-cat]'));
+      var active = { comments: true, imports: true, body: true, tests: false };
+      function render() {
+        steps.forEach(function (s) {
+          var c = s.getAttribute('data-step');
+          s.classList.toggle('on', !!active[c]);
+          s.setAttribute('aria-pressed', String(!!active[c]));
+        });
+        targets.forEach(function (el) {
+          el.classList.toggle('off', !!active[el.getAttribute('data-cat')]);
+        });
+      }
+      steps.forEach(function (s) {
+        s.setAttribute('role', 'button');
+        s.setAttribute('tabindex', '0');
+        var c = s.getAttribute('data-step');
+        function toggle() { active[c] = !active[c]; render(); }
+        s.addEventListener('click', toggle);
+        s.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+        });
+      });
+      render();
+    })();
+  </script>
 </body>
 </html>

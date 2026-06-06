@@ -1,6 +1,6 @@
 limits:
   Rust: 500
-  Markdown: 200
+  Markdown: 220
 
 count_mode: total
 

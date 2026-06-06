@@ -13,8 +13,8 @@
 # strip = ["comments", "body"]    # keep imports for Rust only
 
 # All per-language config lives under [languages.<lang>]: strip categories,
-# plus (optionally) a dynamic grammar and a rule extend/override. Built-in
-# languages (rust, php) need none of the grammar/rule fields.
+# plus (optionally) a dynamic grammar and a rule extend/override. The 27
+# built-in languages need none of the grammar/rule fields.
 #
 # Dynamic grammar — for a language ast-grep does not bundle. A `libraryPath`
 # marks the entry as a custom grammar; `extensions` and `rules` are required.
