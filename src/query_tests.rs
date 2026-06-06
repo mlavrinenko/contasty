@@ -195,6 +195,48 @@ fn query_rules_intersect_mode_gates_ignored_files() {
 }
 
 #[test]
+fn query_own_ignore_field_overrides_ambient_mode() {
+    // The query's own `ignore:` field wins over the ambient mode at the
+    // reference point. Ambient `enable` would hide the gitignored file, but
+    // the query asks for `disable` and so admits it; ambient `disable` would
+    // admit it, but the query asks for `enable` and so hides it.
+    let tmp = tempfile::tempdir().expect("tempdir");
+    // WalkBuilder respects .gitignore only inside a git repository.
+    fs::create_dir_all(tmp.path().join(".git")).expect("mkdir .git");
+    write(tmp.path(), ".gitignore", "generated/\n");
+    write(tmp.path(), "generated/foo.rs", "fn foo() {}\n");
+
+    // Query overrides ambient enable -> disable, admitting the ignored file.
+    let admit = write(
+        tmp.path(),
+        "admit.cty.yaml",
+        "ignore: disable\nrules: |\n  generated\n",
+    );
+    let mut visited = BTreeSet::new();
+    let (files, _strip) =
+        resolve_query(&admit, IgnoreMode::Enable, tmp.path(), &mut visited).expect("resolve");
+    assert_eq!(
+        files.len(),
+        1,
+        "query's own disable must win over ambient enable: {files:?}"
+    );
+
+    // Query overrides ambient disable -> enable, hiding the ignored file.
+    let hide = write(
+        tmp.path(),
+        "hide.cty.yaml",
+        "ignore: enable\nrules: |\n  generated\n",
+    );
+    let mut visited = BTreeSet::new();
+    let (files, _strip) =
+        resolve_query(&hide, IgnoreMode::Disable, tmp.path(), &mut visited).expect("resolve");
+    assert!(
+        files.is_empty(),
+        "query's own enable must win over ambient disable: {files:?}"
+    );
+}
+
+#[test]
 fn query_rules_cycle_guard_holds() {
     let tmp = tempfile::tempdir().expect("tempdir");
     write(tmp.path(), "real.rs", "fn r() {}\n");

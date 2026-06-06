@@ -37,10 +37,20 @@ struct Cli {
     strip: Vec<String>,
 
     /// Control .gitignore filtering (repeatable, interleaved with paths).
-    /// Modes: enable (default, respect .gitignore), disable (include ignored
-    /// files too), reverse (only .gitignored files). Each occurrence sets the
-    /// mode for the paths that follow until the next --ignore.
-    #[arg(long, value_enum, value_name = "MODE")]
+    #[arg(
+        long,
+        value_enum,
+        value_name = "MODE",
+        long_help = "Control .gitignore filtering (repeatable, interleaved with paths). \
+Modes: enable (default, respect .gitignore), disable (include ignored files \
+too), reverse (only .gitignored files). Each occurrence sets the mode for the \
+paths that follow until the next --ignore.\n\
+\n\
+Examples:\n\
+\x20 contasty --ignore=disable src/      include .gitignored files too\n\
+\x20 contasty --ignore=reverse src/      only .gitignored files\n\
+\x20 contasty A --ignore=disable B --ignore=enable C   per-path mode switching"
+    )]
     ignore: Vec<IgnoreMode>,
 
     /// Print compactization statistics instead of the stripped code.
