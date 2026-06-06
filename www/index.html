@@ -289,8 +289,8 @@
     <div class="wrap">
       <img class="logo" src="./logo.svg" width="84" height="84" alt="contasty logo: braces hugging compacting code lines">
       <h1 class="wordmark">contasty</h1>
-      <p class="tagline">Strips executable lines from your code to prepare tasty context for your agent.</p>
-      <p class="subtag"><b>context</b> is <b>tasty</b> — reduce your repo to a syrup of signatures.</p>
+      <p class="subtag">Make your <b>con<sup><del>text</del></sup>tasty</b> — reduce a code base to a syrup of signatures.</p>
+      <p class="tagline"><a href="#scrollytelling">Leave out</a>: bodies, comments, imports, tests.</p>
       <nav class="cta">
         <a class="btn candy" href="#install"><span class="mono">install</span></a>
         <a class="btn" href="https://github.com/mlavrinenko/contasty">GitHub</a>
@@ -352,7 +352,7 @@
     </section>
 
     <!-- ============ STRIP CATEGORIES (scrollytelling) ============ -->
-    <section>
+    <section id="scrollytelling">
       <div class="wrap">
         <p class="sectlabel">reduce to taste</p>
         <h2>Four ingredients you can leave out</h2>
@@ -372,10 +372,11 @@
 <span class="kw">pub fn</span> <span class="fn">connect</span>(p: <span class="ty">&amp;Pool</span>) -&gt; <span class="ty">Conn</span> {<span data-cat="body" class="skim">
     <span class="kw">let</span> c = p.acquire();
     c.ping()?;
-    c</span>}
+    c</span>
+}
 
-<span class="pu">#[cfg(test)]</span>
-<span data-cat="tests" class="skim"><span class="kw">mod</span> <span class="ty">tests</span> {
+<span data-cat="tests" class="skim"><span class="pu">#[cfg(test)]</span>
+<span class="kw">mod</span> <span class="ty">tests</span> {
     <span class="pu">#[test]</span>
     <span class="kw">fn</span> <span class="fn">pings</span>() {}
 }</span></code></pre>
