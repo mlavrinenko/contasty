@@ -26,10 +26,10 @@ live in git history (removed from the working tree at release). Read one with
 - [x] 07 — Built-in support for every ast-grep bundled language (`07-builtin-languages.md`) — all tiers shipped (26 langs; Markdown intentionally excluded)
 - [x] 08 — README comparison vs repomix --compress (`08-readme-comparison.md`)
 - [x] 09 — Multi-path inputs: files, folders, wildcards (`09-multi-path-inputs.md`)
-- [ ] 10 — Approximate token estimate in `--stats` (`10-token-estimate.md`)
+- [x] 10 — Approximate token estimate in `--stats` (`10-token-estimate.md`)
 - [x] 11 — Query files (`*.cty.yaml`): saved gitignore-style selectors (`11-query-files.md`)
-- [ ] 12 — gitignore modes: `--ignore=<mode>` (find-style, per-path) (`12-gitignore-modes.md`)
-- [ ] 13 — Selection vocabulary: `--strip=<categories>` + query `strip:` (`13-strip-vocabulary.md`)
+- [x] 12 — gitignore modes: `--ignore=<mode>` (find-style, per-path) (`12-gitignore-modes.md`)
+- [x] 13 — Selection vocabulary: `--strip=<categories>` + query `strip:` (`13-strip-vocabulary.md`)
 
 ## Order
 

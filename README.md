@@ -103,6 +103,11 @@ Category gating applies to every supported language — test and import rules in
 each built-in rule file (and any custom rule file) declare which category gates
 them, so the same flags work uniformly.
 
+`--stats` prints original-vs-compacted line counts (code / comments / blanks) and
+an approximate token figure (`~tokens`). The token figure is a dependency-free
+estimate (`~bytes / 4`), not a model tokenizer count — do not read it as
+per-model accurate; use it for relative comparison only.
+
 ## How it compares
 
 Two architectures. contasty is a one-shot stripper: walk the tree, elide bodies
