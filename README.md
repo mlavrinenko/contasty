@@ -16,6 +16,20 @@ constant values, and long string literals — keeping declarations, signatures,
 and types intact. The result prints as a single Markdown document, ready to
 paste into an LLM context window.
 
+```rust
+// before
+pub fn checkout(cart: &Cart, user: &User) -> Result<Receipt> {
+    let total = cart.total();
+    charge(user, total)?;
+    Ok(Receipt::new(total))
+}
+```
+
+```rust
+// after — comments/imports gone, body elided, signature kept
+pub fn checkout(cart: &Cart, user: &User) -> Result<Receipt> {}
+```
+
 Each language is driven by a YAML rule file matched against the AST, not by
 hardcoded per-language logic. Built-in support: Rust, PHP, TypeScript, TSX,
 JavaScript, Python, Go, Java, C#, Ruby, C++, C, Kotlin, Swift, Scala, Bash, Lua,
@@ -111,7 +125,7 @@ is stronger at different things.
 
 |                                        | contasty                                                                | repomix --compress                                                                          |
 | -------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Languages with body elision            | [26, incl. JSON/YAML/HTML/CSS](docs/languages.md)                       | [16, incl. Vue](https://github.com/yamadashy/repomix/tree/main/src/core/treeSitter/queries) |
+| Languages with body elision            | [18 of 27 built-ins](docs/languages.md)                                 | [16, incl. Vue](https://github.com/yamadashy/repomix/tree/main/src/core/treeSitter/queries) |
 | Add a language without a rebuild       | [yes — dynamic grammar + rules](docs/languages.md)                      | no                                                                                          |
 | Extend / override strip rules          | [yes — contasty.toml](docs/custom-rules.md)                             | no (fixed queries)                                                                          |
 | Gate comments (keep / drop)            | [yes — per-language toggle](src/lang/rules/python.yml)                  | [yes — removeComments](https://repomix.com/guide/comment-removal)                           |
