@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-First public release (not yet tagged).
+## [0.1.0] - 2026-06-06
+
+First public release.
 
 ### Added
 
@@ -100,4 +102,5 @@ First public release (not yet tagged).
   `yaml-language-server` modeline; editor wiring is documented for Zed.
 - Markdown renderer with relative paths in per-file headers.
 
-[Unreleased]: https://github.com/mlavrinenko/contasty/commits/main
+[Unreleased]: https://github.com/mlavrinenko/contasty/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/mlavrinenko/contasty/releases/tag/v0.1.0
