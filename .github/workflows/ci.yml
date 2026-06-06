@@ -38,7 +38,7 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get install -y moreutils
-          cargo install cargo-machete linecop
+          cargo install cargo-machete linecop outdatty
 
       - name: Check
         run: just check

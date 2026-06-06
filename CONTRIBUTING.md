@@ -44,6 +44,17 @@ A function can be written, unit-tested, and still never wired into `collect` /
 
 When a file exceeds the limit, split it into modules or separate documents.
 
+## Dependency Drift
+
+[outdatty.yaml](outdatty.yaml) declares groups that couple `source` files to the
+`dependents` that must stay in sync with them — for example, CLI code to the docs
+that describe it. `just check` runs `outdatty check`, which fails when a source
+changed but its dependents were not re-confirmed.
+
+After editing a source, review the listed dependents, update them as needed, then
+run `just outdatty-update` to record the new state into `outdatty.lock` and commit
+it. Add or adjust groups whenever you introduce files that must move together.
+
 ## Submitting Changes
 
 1. Run `just check` before submitting — it runs clippy, tests, and file size checks

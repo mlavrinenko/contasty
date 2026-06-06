@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mlavrinenko/outdatty/main/schema/outdatty.schema.json
+
+# Declares which dependents must be re-confirmed when a source changes. After
+# editing a source, review the dependents and run `just outdatty-update` to
+# record the new state; `just outdatty-check` (part of `just check`) fails until
+# you do. Tune these groups to match where contasty's coupled files live.
+groups:
+  # The CLI surface (commands, flags, behaviour) is documented by hand. Touching
+  # the entry point or top-level library flags the user-facing docs.
+  - name: cli-docs
+    source:
+      - src/main.rs
+      - src/lib.rs
+    dependents:
+      - README.md
+      - www/index.html
+
+  # A package change (version, dependencies, metadata) should land in the
+  # changelog.
+  - name: release-notes
+    source:
+      - Cargo.toml
+    dependents:
+      - CHANGELOG.md
+
+  # The dev tooling and conventions documented for contributors track the
+  # files that define them.
+  - name: dev-docs
+    source:
+      - flake.nix
+      - Justfile
+    dependents:
+      - CONTRIBUTING.md
+
+  # Query files (*.cty.yaml) and gitignore-style selectors are described in
+  # docs/queries.md.
+  - name: query-docs
+    source:
+      - src/query.rs
+      - src/inputs.rs
+    dependents:
+      - docs/queries.md
+
+  # User-extensible / overridable rule sets loaded from contasty.toml are
+  # documented in docs/custom-rules.md.
+  - name: custom-rules-docs
+    source:
+      - src/config.rs
+      - src/lang/overrides.rs
+    dependents:
+      - docs/custom-rules.md
+
+  # The built-in language registry and the reformatting backends each have a
+  # matching doc page.
+  - name: language-docs
+    source:
+      - src/lang/mod.rs
+    dependents:
+      - docs/languages.md
+
+  - name: reformatting-docs
+    source:
+      - src/lang/reformat.rs
+    dependents:
+      - docs/reformatting.md

@@ -64,14 +64,11 @@ contasty A --ignore=disable B --ignore=enable C  # per-path mode switching
 ```
 
 Multiple arguments resolve to a deduped, sorted union of source files. A folder is
-walked `.gitignore`-aware; a glob is expanded internally (quote it so the shell
-does not expand or fail on no match), and a glob that matches directories walks
-each matched subtree. A glob matching nothing warns and is skipped; a named path
-that does not exist is an error.
+walked `.gitignore`-aware; a glob is expanded internally (quote it) and a glob over
+directories walks each subtree. A glob matching nothing warns; a missing path errors.
 
-Output defaults to Markdown. Pass `--format=json` for a pretty-printed JSON
-bundle shaped as `{ "base": <dir>, "files": [{ "path", "lang", "content" }] }`,
-mirroring the Markdown layout.
+Output defaults to Markdown. Pass `--format=json` for a pretty-printed JSON bundle
+shaped as `{ "base": <dir>, "files": [{ "path", "lang", "content" }] }`.
 
 Four categories control what is stripped:
 
@@ -82,10 +79,9 @@ Four categories control what is stripped:
 | `tests`    | kept     | `--strip=tests`                  |
 | `body`     | stripped | `--strip=body`                   |
 
-`--strip` is repeatable, interleaved with paths (find-style). Each occurrence
-sets the strip set for the paths that follow. Comma-separated; prefix a
-category with `!` to remove it. `all` (alias `everything`) strips all four;
-`none` strips nothing.
+`--strip` is repeatable, interleaved with paths (find-style): each occurrence sets
+the strip set for the paths that follow. Comma-separated; prefix a category with `!`
+to remove it. `all` (alias `everything`) strips all four; `none` strips nothing.
 
 `--ignore=<mode>` controls `.gitignore` filtering and is repeatable, interleaved
 with paths (find-style). Each occurrence sets the mode for the paths that follow:
@@ -96,17 +92,16 @@ with paths (find-style). Each occurrence sets the mode for the paths that follow
 | `disable` | Include ignored files too (everything)           |
 | `reverse` | Only `.gitignore`d files                         |
 
-The default (before any `--ignore`) is `enable`. Query files can set their own
-mode with the `ignore:` field (see [docs/queries.md](docs/queries.md)).
+The default (before any `--ignore`) is `enable`. Query files can set their own mode
+with the `ignore:` field (see [docs/queries.md](docs/queries.md)).
 
-Category gating applies to every supported language — test and import rules in
-each built-in rule file (and any custom rule file) declare which category gates
-them, so the same flags work uniformly.
+Category gating applies to every supported language — test and import rules in each
+built-in (or custom) rule file declare which category gates them, so the same flags
+work uniformly.
 
 `--stats` prints original-vs-compacted line counts (code / comments / blanks) and
-an approximate token figure (`~tokens`). The token figure is a dependency-free
-estimate (`~bytes / 4`), not a model tokenizer count — do not read it as
-per-model accurate; use it for relative comparison only.
+an approximate token figure (`~tokens`). That figure is a dependency-free estimate
+(`~bytes / 4`), not a model tokenizer count — use it for relative comparison only.
 
 ## How it compares
 
@@ -184,14 +179,19 @@ extend/override in [docs/custom-rules.md](docs/custom-rules.md).
 Prerequisites: [Nix](https://nixos.org/) with flakes enabled.
 
 ```bash
-direnv allow   # or: nix develop
+direnv allow         # or: nix develop
 
-just check     # fmt + clippy + tests + file-size check
+just outdatty-update # one-time: create outdatty.lock, then commit it
+just check           # fmt + clippy + tests + file-size + drift check
 just build
 just test
-just cover     # code coverage (70% minimum)
-just fmt       # format code
+just cover           # code coverage (70% minimum)
+just fmt             # format code
 ```
+
+[outdatty](https://github.com/mlavrinenko/outdatty) gates files that must stay in
+sync (see [outdatty.yaml](outdatty.yaml)): `just check` fails when a source changes
+but its dependents were not re-confirmed. Update them, then `just outdatty-update`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for coding conventions.
 

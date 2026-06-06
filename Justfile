@@ -7,14 +7,23 @@ default:
 # Run fixes, then other checks
 fix-check: fmt clippy-fix check
 
-# Run all checks in parallel (fmt + clippy + tests + unused deps + file size)
+# Run all checks in parallel (fmt + clippy + tests + unused deps + file size + drift)
 check:
     parallel -j 0 -- \
         "chronic just fmt-check" \
         "chronic cargo clippy --workspace --all-targets -q -- -D warnings" \
         "chronic cargo test --workspace -q" \
         "chronic just machete" \
-        "chronic just check-file-size"
+        "chronic just check-file-size" \
+        "chronic just outdatty-check"
+
+# Fail if a source changed without its dependents being re-confirmed
+outdatty-check:
+    outdatty check --format quiet
+
+# Re-confirm dependency groups: record current hashes into outdatty.lock
+outdatty-update:
+    outdatty update
 
 # Regenerate the rule-file JSON Schema (drift-guarded by the schema_in_sync test in `check`)
 gen-schema:
