@@ -11,12 +11,16 @@ fn write(dir: &Path, name: &str, body: &str) -> PathBuf {
     path
 }
 
-fn with_mode(path: PathBuf, mode: IgnoreMode) -> (PathBuf, IgnoreMode) {
-    (path, mode)
+fn with_mode(path: PathBuf, mode: IgnoreMode) -> (PathBuf, IgnoreMode, Option<StripSet>) {
+    (path, mode, None)
 }
 
-fn enable(path: PathBuf) -> (PathBuf, IgnoreMode) {
+fn enable(path: PathBuf) -> (PathBuf, IgnoreMode, Option<StripSet>) {
     with_mode(path, IgnoreMode::Enable)
+}
+
+fn paths_only(files: &[(PathBuf, FileStrip)]) -> Vec<&PathBuf> {
+    files.iter().map(|(path, _)| path).collect()
 }
 
 #[test]
@@ -47,8 +51,9 @@ fn resolve_glob_matches_files_only() {
     let args = [enable(tmp.path().join("*.rs"))];
     let files = resolve(&args, tmp.path()).expect("resolve");
     assert_eq!(files.len(), 2, "{files:?}");
+    let paths = paths_only(&files);
     assert!(
-        files
+        paths
             .iter()
             .all(|path| path.extension().is_some_and(|ext| ext == "rs"))
     );
@@ -63,7 +68,8 @@ fn resolve_glob_walks_matched_directory_subtree() {
     let args = [enable(tmp.path().join("crates/*/src"))];
     let files = resolve(&args, tmp.path()).expect("resolve");
     assert_eq!(files.len(), 2, "{files:?}");
-    assert!(files.iter().all(|path| path.ends_with("src/lib.rs")));
+    let paths = paths_only(&files);
+    assert!(paths.iter().all(|path| path.ends_with("src/lib.rs")));
 }
 
 #[test]
@@ -79,8 +85,9 @@ fn resolve_unfolds_query_file_in_folder() {
         2,
         "walk adds lib/b.rs, query adds src/a.rs: {files:?}"
     );
+    let paths = paths_only(&files);
     assert!(
-        files
+        paths
             .iter()
             .any(|path| path.to_str().is_some_and(|text| text.contains("src/a.rs")))
     );
@@ -116,7 +123,6 @@ fn normalize_resolves_dot_and_parent() {
 }
 
 fn setup_gitignore_tree(tmp: &Path) -> (PathBuf, PathBuf) {
-    // WalkBuilder respects .gitignore only inside a git repository.
     fs::create_dir_all(tmp.join(".git")).expect("mkdir .git");
     write(tmp, ".gitignore", "ignored.txt\n");
     let kept = write(tmp, "kept.rs", "fn kept() {}\n");
@@ -131,8 +137,9 @@ fn resolve_enable_respects_gitignore() {
     let args = [enable(tmp.path().to_path_buf())];
     let files = resolve(&args, tmp.path()).expect("resolve");
     assert_eq!(files.len(), 1, "{files:?}");
+    let paths = paths_only(&files);
     assert!(
-        files
+        paths
             .first()
             .expect("one")
             .to_str()
@@ -156,8 +163,9 @@ fn resolve_reverse_only_ignored() {
     let args = [with_mode(tmp.path().to_path_buf(), IgnoreMode::Reverse)];
     let files = resolve(&args, tmp.path()).expect("resolve");
     assert_eq!(files.len(), 1, "{files:?}");
+    let paths = paths_only(&files);
     assert!(
-        files
+        paths
             .first()
             .expect("one")
             .to_str()
@@ -179,4 +187,20 @@ fn resolve_mixed_modes_per_path() {
         2,
         "enable gives kept, reverse gives ignored: {files:?}"
     );
+}
+
+#[test]
+fn resolve_last_group_wins_strip_for_dedup() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let file = write(tmp.path(), "a.rs", "fn a() {}\n");
+    let strip_a = StripSet::empty().insert(StripSet::COMMENTS);
+    let strip_b = StripSet::empty().insert(StripSet::TESTS);
+    let args = [
+        (file.clone(), IgnoreMode::Enable, Some(strip_a)),
+        (file.clone(), IgnoreMode::Enable, Some(strip_b)),
+    ];
+    let files = resolve(&args, tmp.path()).expect("resolve");
+    assert_eq!(files.len(), 1);
+    let (_, got_strip) = files.first().expect("one");
+    assert_eq!(got_strip.cli, Some(strip_b), "last group wins");
 }

@@ -14,6 +14,7 @@ fn strip(src: &str, drop_comments: bool, drop_imports: bool, compact: &CompactCo
         false,
         drop_comments,
         drop_imports,
+        true,
         compact,
     )
     .expect("strip")

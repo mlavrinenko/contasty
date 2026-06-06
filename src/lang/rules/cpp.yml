@@ -8,6 +8,7 @@ rules:
   # `compound_statement`). A constructor keeps its member-init list (`: x(t)`),
   # which is outside the body field; only the `{ ... }` block elides to `{}`.
   - action: elide
+    when: body
     field: body
     rule:
       any:
@@ -18,6 +19,7 @@ rules:
   # already-brace-delimited `initializer_list`, which elides to `{}` — a valid
   # initializer. Scalar / constructor-call initializers are left intact.
   - action: elide
+    when: body
     field: value
     min-bytes: elide-min
     rule:

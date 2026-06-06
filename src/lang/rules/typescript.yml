@@ -12,6 +12,7 @@ rules:
   # eliding yields `(x) => {}` — valid and intent-preserving. Overload and
   # ambient signatures carry no `body` field and are left verbatim.
   - action: elide
+    when: body
     field: body
     rule:
       any:
@@ -26,6 +27,7 @@ rules:
   # to data literals so function-valued declarations keep their signature (their
   # body is already elided above). The `{}` marker reads naturally for objects.
   - action: elide
+    when: body
     field: value
     min-bytes: elide-min
     rule:

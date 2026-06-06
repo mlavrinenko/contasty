@@ -9,6 +9,7 @@ rules:
   # Elide every function / method / closure body. JSX-returning arrows are handled
   # the same way; overload/ambient signatures have no `body` and stay verbatim.
   - action: elide
+    when: body
     field: body
     rule:
       any:
@@ -21,6 +22,7 @@ rules:
 
   # Elide large object / array initializers, guarded to data literals.
   - action: elide
+    when: body
     field: value
     min-bytes: elide-min
     rule:

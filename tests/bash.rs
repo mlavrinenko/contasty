@@ -8,8 +8,16 @@ use contasty::config::CompactConfig;
 fn strip(src: &str, drop_comments: bool, compact: &CompactConfig) -> String {
     let reg = Registry::new().expect("registry init");
     let lang = reg.detect(Path::new("x.sh")).expect("bash registered");
-    lang.strip(src, Path::new("x.sh"), false, drop_comments, false, compact)
-        .expect("strip")
+    lang.strip(
+        src,
+        Path::new("x.sh"),
+        false,
+        drop_comments,
+        false,
+        true,
+        compact,
+    )
+    .expect("strip")
 }
 
 #[test]

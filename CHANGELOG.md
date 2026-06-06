@@ -50,17 +50,23 @@ First public release (not yet tagged).
   structural-only (prose context) and ships no rule file.
 - `delete` now removes a deleted node's indentation when it stands alone on its
   line, so an indented import/comment/test leaves no blank stub.
-- Category model with ordered, repeatable flags: `--include=<SEL>` /
-  `--exclude=<SEL>` over `comments`, `imports`, `tests`, and `all` (alias
-  `everything`). Both flags are processed left to right and the last mention of
-  a category wins, so `--exclude=all --include=comments` excludes everything
-  then re-includes comments. Defaults: comments and tests excluded, imports
-  included.
+- Category model replaced with `--strip=<categories>`: a per-path, find-style
+  flag over `comments`, `imports`, `tests`, `body`, `all` (alias `everything`),
+  and `none`. Comma-separated; prefix a category with `!` to remove it (e.g.
+  `--strip=all,!body`). Replaces the old `--include` / `--exclude` flags.
+  Default: `[comments, imports, body]` — comments and imports stripped, test
+  signatures kept, bodies elided. `body` is now a first-class strip category
+  gated by `when: body` on elide rules.
+- Query files gain a `strip:` field: a list of categories unioned with the
+  CLI's active strip set (CLI adds to query).
+- Configuration: `[strip]` and `[languages.<lang>]` `strip` replace the old
+  `[include]` / `[languages.<lang>.include]` sections. Same layering shape
+  (built-in < cross-language < per-language < CLI-per-path).
 - Language-agnostic category gating: any rule (built-in or custom) declares a
   `when: comments|imports|tests` gate; the same flags and config activate it
   for every language.
-- Configuration via `contasty.toml`: cross-language category defaults under
-  `[include]`, per-language overrides under `[languages.<lang>.include]`, and
+- Configuration via `contasty.toml`: cross-language strip defaults under
+  `[strip]`, per-language overrides under `[languages.<lang>]` `strip`, and
   compaction thresholds under `[compact]` (`elide_min_bytes`, default 80;
   `max_string_bytes`, default 256). Config loads first; CLI overrides it.
 - Per-language config consolidated under `[languages.<lang>]`: a `libraryPath`

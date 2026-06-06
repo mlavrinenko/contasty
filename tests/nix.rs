@@ -14,6 +14,7 @@ fn strip(src: &str, drop_comments: bool, compact: &CompactConfig) -> String {
         false,
         drop_comments,
         false,
+        true,
         compact,
     )
     .expect("strip")

@@ -48,12 +48,12 @@ contasty src/lib.rs src/main.rs        # several files at once
 contasty 'src/**/*.rs'                 # glob (quote it; expanded internally)
 contasty 'crates/*/src'                # glob to dirs; each subtree is walked
 contasty                               # default path is "."
-contasty --include=comments src/       # keep comments (doc comments included)
-contasty --include=tests src/          # keep test functions and test modules
-contasty --exclude=imports src/        # drop every import / `use` declaration
-contasty --include=all src/            # keep everything (alias: --include=everything)
-contasty --exclude=all --include=comments src/   # only comments kept
-contasty --include=everything --exclude=imports  # all except imports
+contasty --strip=comments,imports src/  # strip comments and imports
+contasty --strip=tests src/             # also strip test functions
+contasty --strip=all src/               # strip everything (alias: everything)
+contasty --strip=all,!body src/         # strip all except bodies
+contasty --strip=none src/              # strip nothing (keep all categories)
+contasty --strip=none tests/            # per-path: keep everything in tests/
 contasty --format=json src/            # emit a JSON bundle instead of Markdown
 contasty --stats src/                  # print compactization statistics
 contasty --config path.toml src/       # use a specific contasty.toml
@@ -73,17 +73,19 @@ Output defaults to Markdown. Pass `--format=json` for a pretty-printed JSON
 bundle shaped as `{ "base": <dir>, "files": [{ "path", "lang", "content" }] }`,
 mirroring the Markdown layout.
 
-Three categories control what is kept or dropped:
+Four categories control what is stripped:
 
-| Category   | Default  | Selectors              |
-| ---------- | -------- | ---------------------- |
-| `comments` | excluded | `--include=comments`   |
-| `tests`    | excluded | `--include=tests`      |
-| `imports`  | included | `--exclude=imports`    |
+| Category   | Default  | Example                          |
+| ---------- | -------- | -------------------------------- |
+| `comments` | stripped | `--strip=comments`               |
+| `imports`  | stripped | `--strip=imports`                |
+| `tests`    | kept     | `--strip=tests`                  |
+| `body`     | stripped | `--strip=body`                   |
 
-`--include` and `--exclude` are repeatable and processed left to right, so the
-last mention of a category wins. `all` (alias `everything`) applies to all
-three at once.
+`--strip` is repeatable, interleaved with paths (find-style). Each occurrence
+sets the strip set for the paths that follow. Comma-separated; prefix a
+category with `!` to remove it. `all` (alias `everything`) strips all four;
+`none` strips nothing.
 
 `--ignore=<mode>` controls `.gitignore` filtering and is repeatable, interleaved
 with paths (find-style). Each occurrence sets the mode for the paths that follow:
@@ -113,8 +115,8 @@ is stronger at different things.
 | Add a language without a rebuild       | [yes — dynamic grammar + rules](docs/languages.md)                      | no                                                                                          |
 | Extend / override strip rules          | [yes — contasty.toml](docs/custom-rules.md)                             | no (fixed queries)                                                                          |
 | Gate comments (keep / drop)            | [yes — per-language toggle](src/lang/rules/python.yml)                  | [yes — removeComments](https://repomix.com/guide/comment-removal)                           |
-| Gate imports (keep / drop)             | [yes — --exclude=imports](src/lang/rules/python.yml)                    | no (imports kept)                                                                           |
-| Gate tests (keep / drop)               | [yes — --include/--exclude=tests](src/lang/rules/python.yml)            | no                                                                                          |
+| Gate imports (keep / drop)             | [yes — --strip=imports](src/lang/rules/python.yml)                      | no (imports kept)                                                                           |
+| Gate tests (keep / drop)               | [yes — --strip=tests](src/lang/rules/python.yml)                        | no                                                                                          |
 | Stripped-region output                 | [valid empty bodies, reparseable](tests/fixtures/go/sample.stripped.go) | [⋮---- placeholder markers](https://repomix.com/guide/code-compress)                        |
 | Optional reformat of result            | [yes — Topiary / shell-out](docs/reformatting.md)                       | no                                                                                          |
 | Runtime                                | [single static binary](Cargo.toml)                                      | [Node.js](https://github.com/yamadashy/repomix)                                             |
@@ -137,20 +139,17 @@ set default category inclusion, register dynamic grammars, and extend or
 override per-language rules. All fields are optional. See
 [docs/languages.md](docs/languages.md) and [docs/custom-rules.md](docs/custom-rules.md).
 
-Category inclusion can be set cross-language under `[include]` and refined
-per language under `[languages.<lang>.include]`:
+Category stripping can be set cross-language under `[strip]` and refined
+per language under `[languages.<lang>]`:
 
 ```toml
-[include]
-comments = false   # exclude comments by default (built-in default)
-imports  = true    # include imports by default (built-in default)
-tests    = false   # exclude tests by default (built-in default)
+strip = ["comments", "imports", "body"]   # cross-language defaults
 
-[languages.rust.include]
-comments = true    # keep doc comments for Rust only
+[languages.rust]
+strip = ["comments", "body"]              # keep imports for Rust only
 ```
 
-CLI flags override config for all languages. Config loads first; CLI wins.
+CLI `--strip` overrides config for all languages. Config loads first; CLI wins.
 
 Optional per-language post-strip reformatting (cosmetic, off by default) is
 configured with the `reformat` key — embedded Topiary or a shell-out command.

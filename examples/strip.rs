@@ -24,7 +24,7 @@ fn main() {
         ..CompactConfig::default()
     };
     let out = lang
-        .strip(&src, path, true, true, true, &compact)
+        .strip(&src, path, true, true, true, true, &compact)
         .expect("strip");
     print!("{out}");
 }

@@ -14,6 +14,7 @@ rules:
   # expression — each elides to `{}`, a valid empty block. Abstract / interface
   # methods carry no `body` field and are left verbatim.
   - action: elide
+    when: body
     field: body
     rule:
       any:

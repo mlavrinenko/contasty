@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{CommandFactory, FromArgMatches, Parser, ValueEnum};
 
-use contasty::CategorySelection;
+use contasty::StripSet;
 use contasty::config::Config;
 use contasty::inputs::IgnoreMode;
 
@@ -15,20 +15,6 @@ enum OutputFormat {
     Markdown,
     /// Pretty-printed JSON bundle: `{ base, files: [{ path, lang, content }] }`.
     Json,
-}
-
-/// A category of code elements to include or exclude.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
-enum Selector {
-    /// Comment lines and blocks (including doc comments).
-    Comments,
-    /// Import / use declarations.
-    Imports,
-    /// Test functions and test modules.
-    Tests,
-    /// All three categories (alias: everything).
-    #[value(alias = "everything")]
-    All,
 }
 
 /// Strips executable code from your source files, leaving declarations
@@ -43,17 +29,12 @@ struct Cli {
     #[arg(value_name = "PATH")]
     paths: Vec<PathBuf>,
 
-    /// Include a category in the output (repeatable). Selectors: comments,
-    /// imports, tests, all (alias: everything). Applied left-to-right with
-    /// --exclude; last mention of a category wins.
-    #[arg(long, value_enum, value_name = "SEL")]
-    include: Vec<Selector>,
-
-    /// Exclude a category from the output (repeatable). Selectors: comments,
-    /// imports, tests, all (alias: everything). Applied left-to-right with
-    /// --include; last mention of a category wins.
-    #[arg(long, value_enum, value_name = "SEL")]
-    exclude: Vec<Selector>,
+    /// Categories to strip (repeatable, interleaved with paths). Comma-separated:
+    /// comments, imports, tests, body, all (alias: everything), none. Prefix a
+    /// category with ! to remove it (e.g. all,!body). Each occurrence sets the
+    /// strip set for the paths that follow until the next --strip.
+    #[arg(long, value_name = "CATS")]
+    strip: Vec<String>,
 
     /// Control .gitignore filtering (repeatable, interleaved with paths).
     /// Modes: enable (default, respect .gitignore), disable (include ignored
@@ -63,7 +44,6 @@ struct Cli {
     ignore: Vec<IgnoreMode>,
 
     /// Print compactization statistics instead of the stripped code.
-    /// Shows original vs compacted line counts (code, comments, blanks).
     #[arg(long)]
     stats: bool,
 
@@ -71,91 +51,66 @@ struct Cli {
     #[arg(long, value_enum, default_value = "markdown")]
     format: OutputFormat,
 
-    /// Disable all post-strip reformatting, including built-in passes and any
-    /// `reformat` configured in `contasty.toml`. Useful to skip a slow or
-    /// untrusted shell-out formatter without editing config.
+    /// Disable all post-strip reformatting.
     #[arg(long)]
     no_reformat: bool,
 
     /// Path to a `contasty.toml` configuration file.
-    /// When not set, defaults to `contasty.toml` in the current directory.
     #[arg(long)]
     config: Option<PathBuf>,
 }
 
-#[derive(Clone, Copy)]
-enum Op {
-    Include,
-    Exclude,
-}
-
-fn ordered_selectors(m: &clap::ArgMatches) -> Vec<(Op, Selector)> {
-    let mut events: Vec<(usize, Op, Selector)> = Vec::new();
-    for (id, op) in [("include", Op::Include), ("exclude", Op::Exclude)] {
-        let Some(values) = m.get_many::<Selector>(id) else {
-            continue;
-        };
-        let Some(indices) = m.indices_of(id) else {
-            continue;
-        };
-        for (sel, idx) in values.copied().zip(indices) {
-            events.push((idx, op, sel));
-        }
-    }
-    events.sort_by_key(|&(idx, _, _)| idx);
-    events.into_iter().map(|(_, op, sel)| (op, sel)).collect()
-}
-
-fn cli_override(ops: &[(Op, Selector)]) -> CategorySelection {
-    let mut sel = CategorySelection::default();
-    for &(op, selector) in ops {
-        let on = matches!(op, Op::Include);
-        match selector {
-            Selector::Comments => sel.comments = Some(on),
-            Selector::Imports => sel.imports = Some(on),
-            Selector::Tests => sel.tests = Some(on),
-            Selector::All => {
-                sel.comments = Some(on);
-                sel.imports = Some(on);
-                sel.tests = Some(on);
-            }
-        }
-    }
-    sel
-}
-
-/// Group positional paths by interleaved `--ignore` mode switches.
+/// Group positional paths by interleaved `--ignore` and `--strip` switches.
 ///
-/// Each path receives the most-recently-seen mode (default `Enable`).
-/// Consecutive paths sharing a mode are coalesced into one group.
-fn path_groups(m: &clap::ArgMatches) -> Vec<(PathBuf, IgnoreMode)> {
-    let mut events: Vec<(usize, Option<IgnoreMode>, Option<PathBuf>)> = Vec::new();
+/// Each path receives the most-recently-seen ignore mode (default `Enable`) and
+/// CLI strip set. The strip is `None` until the first `--strip`, signalling
+/// "no explicit selection — fall through to config layering"; an explicit
+/// `--strip` sets `Some`. Consecutive paths sharing both are coalesced into one
+/// group.
+fn path_groups(
+    m: &clap::ArgMatches,
+) -> Result<Vec<(PathBuf, IgnoreMode, Option<StripSet>)>, String> {
+    let mut events: Vec<(usize, Event)> = Vec::new();
     if let Some(modes) = m.get_many::<IgnoreMode>("ignore") {
         if let Some(indices) = m.indices_of("ignore") {
             for (mode_val, idx) in modes.copied().zip(indices) {
-                events.push((idx, Some(mode_val), None));
+                events.push((idx, Event::Ignore(mode_val)));
+            }
+        }
+    }
+    if let Some(strips) = m.get_many::<String>("strip") {
+        if let Some(indices) = m.indices_of("strip") {
+            for (strip_val, idx) in strips.zip(indices) {
+                let set = StripSet::parse_list(strip_val)?;
+                events.push((idx, Event::Strip(set)));
             }
         }
     }
     if let Some(paths) = m.get_many::<PathBuf>("paths") {
         if let Some(indices) = m.indices_of("paths") {
             for (path, idx) in paths.cloned().zip(indices) {
-                events.push((idx, None, Some(path)));
+                events.push((idx, Event::Path(path)));
             }
         }
     }
-    events.sort_by_key(|&(idx, _, _)| idx);
+    events.sort_by_key(|&(idx, _)| idx);
     let mut out = Vec::new();
-    let mut active = IgnoreMode::Enable;
-    for (_, maybe_mode, maybe_path) in events {
-        if let Some(mode_val) = maybe_mode {
-            active = mode_val;
-        }
-        if let Some(path) = maybe_path {
-            out.push((path, active));
+    let mut active_ignore = IgnoreMode::Enable;
+    let mut active_strip: Option<StripSet> = None;
+    for (_, event) in events {
+        match event {
+            Event::Ignore(mode_val) => active_ignore = mode_val,
+            Event::Strip(set) => active_strip = Some(set),
+            Event::Path(path) => out.push((path, active_ignore, active_strip)),
         }
     }
-    out
+    Ok(out)
+}
+
+enum Event {
+    Ignore(IgnoreMode),
+    Strip(StripSet),
+    Path(PathBuf),
 }
 
 fn main() -> Result<()> {
@@ -165,10 +120,9 @@ fn main() -> Result<()> {
     let cwd = std::env::current_dir()?;
     let mut config = Config::load(cli.config.as_deref(), &cwd);
     config.no_reformat = cli.no_reformat;
-    let override_sel = cli_override(&ordered_selectors(&m));
-    let groups = path_groups(&m);
+    let groups = path_groups(&m).map_err(|msg| anyhow::anyhow!("{msg}"))?;
     let files = contasty::resolve(&groups, &cwd)?;
-    let items = contasty::collect(&files, override_sel, &config)?;
+    let items = contasty::collect(&files, &config)?;
     if cli.stats {
         let report = contasty::stats::compute(&items);
         print!("{report}");

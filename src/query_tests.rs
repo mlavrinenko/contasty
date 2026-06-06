@@ -19,7 +19,7 @@ fn query_inline_rules_unfolds_matching_files() {
     write(tmp.path(), "lib/c.rs", "fn c() {}\n");
     let query = write(tmp.path(), "api.cty.yaml", "rules: |\n  src\n");
     let mut visited = BTreeSet::new();
-    let files =
+    let (files, _strip) =
         resolve_query(&query, IgnoreMode::Enable, tmp.path(), &mut visited).expect("resolve");
     assert_eq!(files.len(), 2, "{files:?}");
     assert!(
@@ -37,7 +37,7 @@ fn query_negation_excludes_files() {
     let body = "rules: |\n  src\n  !src/drop.rs\n";
     let query = write(tmp.path(), "q.cty.yaml", body);
     let mut visited = BTreeSet::new();
-    let files =
+    let (files, _strip) =
         resolve_query(&query, IgnoreMode::Enable, tmp.path(), &mut visited).expect("resolve");
     assert_eq!(files.len(), 1, "{files:?}");
     assert!(
@@ -57,7 +57,7 @@ fn query_list_form_rules() {
     let body = "rules:\n  - \"src/**/*.rs\"\n  - \"!**/*_test.rs\"\n";
     let query = write(tmp.path(), "q.cty.yaml", body);
     let mut visited = BTreeSet::new();
-    let files =
+    let (files, _strip) =
         resolve_query(&query, IgnoreMode::Enable, tmp.path(), &mut visited).expect("resolve");
     assert_eq!(files.len(), 1, "{files:?}");
     assert!(
@@ -78,7 +78,7 @@ fn query_external_rules_file() {
     let body = "rules:\n  path: ./special.ignore\n";
     let query = write(tmp.path(), "q.cty.yaml", body);
     let mut visited = BTreeSet::new();
-    let files =
+    let (files, _strip) =
         resolve_query(&query, IgnoreMode::Enable, tmp.path(), &mut visited).expect("resolve");
     assert_eq!(files.len(), 1, "{files:?}");
     assert!(
@@ -99,7 +99,7 @@ fn query_import_unions_results() {
     let body = "rules: |\n  src\nimport:\n  - shared.cty.yaml\n";
     let query = write(tmp.path(), "main.cty.yaml", body);
     let mut visited = BTreeSet::new();
-    let files =
+    let (files, _strip) =
         resolve_query(&query, IgnoreMode::Enable, tmp.path(), &mut visited).expect("resolve");
     assert_eq!(files.len(), 2, "{files:?}");
 }
@@ -122,7 +122,7 @@ fn query_optional_import_skips_silently() {
     let body = "rules: |\n  src\nimport:\n  - path: missing.cty.yaml\n    required: false\n";
     let query = write(tmp.path(), "q.cty.yaml", body);
     let mut visited = BTreeSet::new();
-    let files =
+    let (files, _strip) =
         resolve_query(&query, IgnoreMode::Enable, tmp.path(), &mut visited).expect("resolve");
     assert_eq!(files.len(), 1, "{files:?}");
 }
@@ -139,7 +139,7 @@ fn query_cycle_guard_prevents_infinite_recursion() {
     write(tmp.path(), "b.cty.yaml", "import:\n  - a.cty.yaml\n");
     let query = tmp.path().join("a.cty.yaml");
     let mut visited = BTreeSet::new();
-    let files =
+    let (files, _strip) =
         resolve_query(&query, IgnoreMode::Enable, tmp.path(), &mut visited).expect("resolve");
     assert_eq!(files.len(), 1, "{files:?}");
 }
@@ -153,7 +153,7 @@ fn query_rules_matched_query_file_unfolds() {
     // not by being emitted as YAML content.
     let query = write(tmp.path(), "main.cty.yaml", "rules: |\n  sub.cty.yaml\n");
     let mut visited = BTreeSet::new();
-    let files =
+    let (files, _strip) =
         resolve_query(&query, IgnoreMode::Enable, tmp.path(), &mut visited).expect("resolve");
     assert_eq!(files.len(), 1, "{files:?}");
     assert!(
@@ -177,7 +177,7 @@ fn query_rules_intersect_mode_gates_ignored_files() {
     let query = write(tmp.path(), "q.cty.yaml", "rules: |\n  generated\n");
 
     let mut visited = BTreeSet::new();
-    let enabled =
+    let (enabled, _strip) =
         resolve_query(&query, IgnoreMode::Enable, tmp.path(), &mut visited).expect("resolve");
     assert!(
         enabled.is_empty(),
@@ -185,7 +185,7 @@ fn query_rules_intersect_mode_gates_ignored_files() {
     );
 
     let mut visited = BTreeSet::new();
-    let disabled =
+    let (disabled, _strip) =
         resolve_query(&query, IgnoreMode::Disable, tmp.path(), &mut visited).expect("resolve");
     assert_eq!(
         disabled.len(),
@@ -206,7 +206,7 @@ fn query_rules_cycle_guard_holds() {
     write(tmp.path(), "b.cty.yaml", "rules: |\n  a.cty.yaml\n");
     let query = tmp.path().join("a.cty.yaml");
     let mut visited = BTreeSet::new();
-    let files =
+    let (files, _strip) =
         resolve_query(&query, IgnoreMode::Enable, tmp.path(), &mut visited).expect("resolve");
     assert_eq!(files.len(), 1, "{files:?}");
 }
@@ -240,4 +240,31 @@ fn query_unknown_field_errors() {
     let err = resolve_query(&query, IgnoreMode::Enable, tmp.path(), &mut visited)
         .expect_err("unknown field must error");
     assert!(matches!(err, AppError::Query(_)), "{err:?}");
+}
+
+#[test]
+fn query_strip_field_returns_set() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    write(tmp.path(), "src/a.rs", "fn a() {}\n");
+    let body = "rules: |\n  src\nstrip: [comments, imports]\n";
+    let query = write(tmp.path(), "q.cty.yaml", body);
+    let mut visited = BTreeSet::new();
+    let (files, strip) =
+        resolve_query(&query, IgnoreMode::Enable, tmp.path(), &mut visited).expect("resolve");
+    assert_eq!(files.len(), 1, "{files:?}");
+    assert!(strip.drop_comments(), "comments in strip set");
+    assert!(strip.drop_imports(), "imports in strip set");
+    assert!(!strip.drop_tests(), "tests not in strip set");
+    assert!(!strip.drop_bodies(), "body not in strip set");
+}
+
+#[test]
+fn query_strip_absent_returns_empty() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    write(tmp.path(), "src/a.rs", "fn a() {}\n");
+    let query = write(tmp.path(), "q.cty.yaml", "rules: |\n  src\n");
+    let mut visited = BTreeSet::new();
+    let (_, strip) =
+        resolve_query(&query, IgnoreMode::Enable, tmp.path(), &mut visited).expect("resolve");
+    assert_eq!(strip, StripSet::empty(), "no strip field = empty set");
 }

@@ -22,6 +22,7 @@ fn strip(
         drop_tests,
         drop_comments,
         drop_imports,
+        true,
         compact,
     )
     .expect("strip")

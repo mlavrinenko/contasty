@@ -13,6 +13,7 @@ rules:
   # (`= expr`) both live in the `body` field; eliding to `{}` (an empty block) is
   # valid in either position. Abstract `def`s carry no `body` field and are kept.
   - action: elide
+    when: body
     field: body
     rule:
       kind: function_definition

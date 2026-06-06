@@ -29,6 +29,7 @@ A query file has three optional top-level keys:
 | `ignore` | Gitignore filtering mode for this query       |
 | `rules`  | Gitignore-syntax selection patterns           |
 | `import` | Other query files to union into the result    |
+| `strip`  | Categories to strip for this query's files    |
 
 Unknown keys are rejected (`deny_unknown_fields`).
 
@@ -103,6 +104,17 @@ missing optional import is silently skipped.
 
 Import paths are relative to the importing query file's directory.
 
+### `strip`
+
+Categories to strip for files selected by this query. Same vocabulary as the
+CLI `--strip` flag: a list of `comments`, `imports`, `tests`, `body`. The
+query's strip set is unioned with the CLI's active strip set (CLI adds to
+query).
+
+```yaml
+strip: [comments, imports]
+```
+
 ## Pattern semantics
 
 Patterns follow `.gitignore` conventions:
@@ -136,19 +148,15 @@ working directory as before.
 
 ## Examples
 
-### Select a subtree, exclude tests
-
 ```yaml
-# domain.cty.yaml
+# domain.cty.yaml — select a subtree, exclude tests
 rules: |
   src/Domain
   !**/*Test.php
 ```
 
-### Combine multiple queries
-
 ```yaml
-# full.cty.yaml
+# full.cty.yaml — combine multiple queries
 import:
   - domain.cty.yaml
   - api.cty.yaml
@@ -156,43 +164,31 @@ import:
     required: false
 ```
 
-### Use an external ignore file
-
 ```yaml
-# review.cty.yaml
+# review.cty.yaml — use an external ignore file
 rules:
   path: ./review-scope.ignore
-```
-
-Where `review-scope.ignore` contains:
-
-```
-src/Service
-src/Controller
-!src/Controller/Admin
 ```
 
 ### Query inside a walked folder / Nested query files
 
 When `contasty` walks a directory, any `*.cty.yaml` found inside is
 automatically unfolded. If its `rules` match another `*.cty.yaml`, that file
-unfolds recursively — its selection joins the union instead of being emitted as
-content.
+unfolds recursively — its selection joins the union instead of being emitted.
 
 ## Cycle guard
 
-Imports (and `rules` that match other query files) may form cycles (A pulls in
-B, B pulls in A). The resolver tracks visited query files and skips duplicates,
-so cycles terminate without error.
+Imports and `rules` that match other query files may form cycles. The resolver
+tracks visited query files and skips duplicates, so cycles terminate without error.
 
 ## Error conditions
 
-| Condition                          | Result  |
-|------------------------------------|---------|
-| Broken YAML syntax                 | Error   |
-| Unknown top-level key              | Error   |
-| Missing required import            | Error   |
-| Path escapes working directory     | Error   |
-| Malformed pattern                  | Error   |
-| Missing optional import            | Skipped |
-| Cyclic import                      | Skipped |
+| Condition                      | Result  |
+|--------------------------------|---------|
+| Broken YAML syntax             | Error   |
+| Unknown top-level key          | Error   |
+| Missing required import        | Error   |
+| Path escapes working directory | Error   |
+| Malformed pattern              | Error   |
+| Missing optional import        | Skipped |
+| Cyclic import                  | Skipped |

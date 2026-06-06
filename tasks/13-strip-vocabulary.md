@@ -22,16 +22,20 @@ and `12` for the shared parser.
   like `--ignore`; the two share one parser. Each `--strip=` sets the strip set for
   the paths that follow; among several `--strip` before one path the last wins
   (replace, not add). Replaces `--include` / `--exclude` outright (no aliases).
-  - Categories, comma-separated: `comments`, `imports`, `tests`, plus `all` /
-    `everything` and `none`.
-  - `none` = strip no categories (comments / imports / tests all kept); `all` =
-    strip all three. Body elision is unconditional (always-on rules), so even
-    `--strip=none` still elides bodies — `none` keeps the three category groups,
-    not the bodies.
+  - Categories, comma-separated: `comments`, `imports`, `tests`, `body`, plus
+    `all` / `everything` and `none`.
+  - `!` negation: prefix a category with `!` to remove it from the set built so
+    far. `--strip=all,!body` strips everything except bodies. `--strip=none,comments`
+    strips only comments. Tokens are processed left to right within one `--strip=`.
+  - `none` = strip no categories (all four kept); `all` = strip all four
+    (`comments`, `imports`, `tests`, `body`).
+  - `body` = function/method body elision (the `{}` replacement). Gated by a new
+    `when: body` rule gate replacing the unconditional `when: always` on elide
+    rules. String truncation and other non-body rules stay `when: always`.
   - Example: `contasty --strip=comments,imports src/ --strip=none tests/`.
-- Default (before any `--strip`) = `[comments, imports]`: imports stripped, test
-  signatures kept (polarity flip from today; comments still stripped).
-- Query `strip:` field, same vocabulary: `strip: [comments, imports]`.
+- Default (before any `--strip`) = `[comments, imports, body]`: comments and
+  imports stripped, test signatures kept, bodies elided.
+- Query `strip:` field, same vocabulary: `strip: [comments, imports, body]`.
 
 ## Combination rules (decided)
 
@@ -61,24 +65,32 @@ and `12` for the shared parser.
   cross-language < per-language < CLI-per-path, then query-union); invert polarity
   (strip-list vs include-flags). `src/config.rs` `CategorySelection` /
   `resolve_selection` rework.
+- `body` is a first-class strip category. Rule files change: elide rules that
+  replace function/method bodies with `{}` move from `when: always` (default) to
+  `when: body`. String truncation (`action: truncate`) and other non-body rules
+  stay `when: always`. This makes body elision user-controllable without special
+  cases.
 - Ripple is contained (verified): the 26 language goldens are NOT affected — their
-  snapshot tests and the `strip` example drop all three categories explicitly via
-  the `Registry` API, not via defaults. Only `src/config.rs`, `tests/cli.rs`,
-  `src/main.rs`, and README change.
+  snapshot tests and the `strip` example drop all categories explicitly via the
+  `Registry` API, not via defaults. Only `src/config.rs`, `tests/cli.rs`,
+  `src/main.rs`, rule YAML files, and README change.
 
 ## Acceptance
 
 - [ ] CLI `--strip=<categories>` per-path, find-style, sharing the task-`12`
-      parser; comma-list; last-of-kind wins; `none` / `all`; `--include` /
-      `--exclude` removed.
+      parser; comma-list with `!` negation; last-of-kind wins; `none` / `all`;
+      `--include` / `--exclude` removed.
+- [ ] `body` as a first-class strip category; `when: body` gate on elide rules;
+      `Gate::Body` in the rule schema.
 - [ ] Per-file strip travels resolve → collect; dedup = last-group-wins.
 - [ ] Query `strip:` field; query.strip ∪ active CLI strip for the query's files.
 - [ ] Config `[strip]` + `[languages.<lang>.strip]`; layering preserved;
       `src/config.rs` reworked.
-- [ ] Default strip = `[comments, imports]`; `config.rs` + `tests/cli.rs` updated
-      to the new polarity (imports stripped, tests kept).
-- [ ] Tests: per-path strip; comma-list; last-of-kind; `none` / `all`; dedup
-      last-group-wins; query union; config layering; default behaviour.
+- [ ] Default strip = `[comments, imports, body]`; `config.rs` + `tests/cli.rs`
+      updated to the new polarity (imports stripped, tests kept, bodies elided).
+- [ ] Tests: per-path strip; comma-list; `!` negation; last-of-kind; `none` /
+      `all`; dedup last-group-wins; query union; config layering; default
+      behaviour; body category.
 - [ ] Docs: README (usage + table) + `docs/queries.md` + CHANGELOG migration note.
 - [ ] `just fix-check` green.
 

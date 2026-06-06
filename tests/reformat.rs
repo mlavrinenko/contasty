@@ -38,7 +38,7 @@ fn strip(config: &Config, ext: &str, src: &str) -> Result<String, contasty::AppE
     let name = format!("x.{ext}");
     let path = Path::new(&name);
     let lang = registry.detect(path).expect("language registered");
-    lang.strip(src, path, true, true, true, &config.compact)
+    lang.strip(src, path, true, true, true, true, &config.compact)
 }
 
 fn expect_config_error(config: &Config) -> contasty::AppError {

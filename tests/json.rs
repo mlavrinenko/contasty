@@ -8,7 +8,7 @@ use contasty::config::CompactConfig;
 fn strip(src: &str, compact: &CompactConfig) -> String {
     let reg = Registry::new().expect("registry init");
     let lang = reg.detect(Path::new("x.json")).expect("json registered");
-    lang.strip(src, Path::new("x.json"), false, false, false, compact)
+    lang.strip(src, Path::new("x.json"), false, false, false, true, compact)
         .expect("strip")
 }
 

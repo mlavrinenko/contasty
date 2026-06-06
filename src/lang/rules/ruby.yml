@@ -12,6 +12,7 @@ rules:
   # bodies are also `body_statement` but are not anchored here, so their method
   # signatures survive — only the method bodies go.
   - action: elide
+    when: body
     field: body
     rule:
       any:
@@ -22,6 +23,7 @@ rules:
   # empty hash, so the spliced result stays valid. Array literals are left intact —
   # eliding `[...]` to `{}` would silently retype the value to a hash.
   - action: elide
+    when: body
     field: right
     min-bytes: elide-min
     rule:

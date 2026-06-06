@@ -8,6 +8,7 @@ rules:
   # Elide every function / method / closure body. Arrow functions with an
   # expression body elide to `(x) => {}`.
   - action: elide
+    when: body
     field: body
     rule:
       any:
@@ -20,6 +21,7 @@ rules:
 
   # Elide large object / array initializers, guarded to data literals.
   - action: elide
+    when: body
     field: value
     min-bytes: elide-min
     rule:

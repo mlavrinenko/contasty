@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::AppError;
-use crate::config::{CategorySelection, Config};
+use crate::config::{Config, FileStrip};
 use crate::lang::Registry;
 
 /// One file's stripped representation, ready for rendering.
@@ -25,14 +25,10 @@ pub struct Stripped {
 }
 
 /// Strip every supported file in `files` (a resolved, deduped set from
-/// [`crate::resolve`]).
+/// [`crate::resolve`], paired with per-file strip categories).
 ///
 /// Unsupported extensions and reserved query files (`*.cty.{yaml,yml}`) are
 /// silently skipped. Output is sorted by path for deterministic rendering.
-///
-/// Category inclusion is resolved per language by layering built-in defaults,
-/// config cross-language defaults (`[include]`), per-language config
-/// (`[languages.<lang>.include]`), and the `cli` override (global, applied last).
 ///
 /// # Errors
 ///
@@ -40,18 +36,11 @@ pub struct Stripped {
 /// - [`AppError::CustomLang`] when a configured dynamic grammar fails to load.
 /// - [`AppError::Rule`] / [`AppError::RuleParse`] / [`AppError::ParseFailed`]
 ///   when a language module misbehaves on a real file.
-pub fn collect(
-    files: &[PathBuf],
-    cli: CategorySelection,
-    config: &Config,
-) -> Result<Vec<Stripped>, AppError> {
+pub fn collect(files: &[(PathBuf, FileStrip)], config: &Config) -> Result<Vec<Stripped>, AppError> {
     let registry = Registry::with_config(config)?;
-    // Parse + strip in parallel — tree-sitter parsing and any reformat pass
-    // dominate the runtime and are per-file independent. `Registry` is `Sync`,
-    // so one instance is shared read-only.
     let mut out: Vec<Stripped> = files
         .par_iter()
-        .filter_map(|path| strip_one(path, &registry, cli, config).transpose())
+        .filter_map(|(path, strip)| strip_one(path, *strip, &registry, config).transpose())
         .collect::<Result<Vec<Stripped>, AppError>>()?;
     out.sort_by(|left, right| left.path.cmp(&right.path));
     Ok(out)
@@ -59,19 +48,17 @@ pub fn collect(
 
 fn strip_one(
     path: &Path,
+    strip: FileStrip,
     registry: &Registry,
-    cli: CategorySelection,
     config: &Config,
 ) -> Result<Option<Stripped>, AppError> {
-    // Reserve the query sub-extension: a `*.cty.yaml` would otherwise be detected
-    // as YAML source and stripped instead of (later) unfolded.
     if crate::inputs::is_query_file(path) {
         return Ok(None);
     }
     let Some(language) = registry.detect(path) else {
         return Ok(None);
     };
-    let drops = config.resolve_selection(language.name, cli);
+    let drops = config.resolve_drops(language.name, strip);
     let source = fs::read_to_string(path)?;
     let content = language.strip(
         &source,
@@ -79,6 +66,7 @@ fn strip_one(
         drops.drop_tests,
         drops.drop_comments,
         drops.drop_imports,
+        drops.drop_bodies,
         &config.compact,
     )?;
     Ok(Some(Stripped {
@@ -94,23 +82,23 @@ mod tests {
     use std::fs;
 
     use super::*;
-
-    fn sel(
-        comments: Option<bool>,
-        imports: Option<bool>,
-        tests: Option<bool>,
-    ) -> CategorySelection {
-        CategorySelection {
-            comments,
-            imports,
-            tests,
-        }
-    }
+    use crate::config::StripSet;
 
     fn write_file(dir: &Path, name: &str, body: &str) -> PathBuf {
         let path = dir.join(name);
         fs::write(&path, body).expect("write");
         path
+    }
+
+    fn with_strip(paths: &[PathBuf]) -> Vec<(PathBuf, FileStrip)> {
+        with_custom_strip(paths, StripSet::DEFAULT)
+    }
+
+    fn with_custom_strip(paths: &[PathBuf], strip: StripSet) -> Vec<(PathBuf, FileStrip)> {
+        paths
+            .iter()
+            .map(|path| (path.clone(), FileStrip::new(Some(strip), StripSet::empty())))
+            .collect()
     }
 
     #[test]
@@ -121,8 +109,7 @@ mod tests {
             "a.rs",
             "fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n",
         );
-        let items =
-            collect(&[path], CategorySelection::default(), &Config::default()).expect("collect");
+        let items = collect(&with_strip(&[path]), &Config::default()).expect("collect");
         assert_eq!(items.len(), 1);
         let item = items.first().expect("one item");
         assert_eq!(item.lang_name, "rust");
@@ -135,8 +122,7 @@ mod tests {
     fn collect_skips_unknown_extensions() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let path = write_file(tmp.path(), "readme.txt", "plain text");
-        let items =
-            collect(&[path], CategorySelection::default(), &Config::default()).expect("collect");
+        let items = collect(&with_strip(&[path]), &Config::default()).expect("collect");
         assert!(items.is_empty());
     }
 
@@ -144,8 +130,7 @@ mod tests {
     fn collect_skips_query_files() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let path = write_file(tmp.path(), "api.cty.yaml", "rules: []\n");
-        let items =
-            collect(&[path], CategorySelection::default(), &Config::default()).expect("collect");
+        let items = collect(&with_strip(&[path]), &Config::default()).expect("collect");
         assert!(items.is_empty(), "query file must not be stripped as yaml");
     }
 
@@ -160,8 +145,7 @@ mod tests {
                 "fn id(value: i32) -> i32 { value }\n",
             ));
         }
-        let items =
-            collect(&paths, CategorySelection::default(), &Config::default()).expect("collect");
+        let items = collect(&with_strip(&paths), &Config::default()).expect("collect");
         let names: Vec<_> = items
             .iter()
             .map(|item| {
@@ -185,41 +169,29 @@ mod tests {
                    }\n";
         let path = write_file(tmp.path(), "a.rs", src);
 
+        let keep_tests = StripSet::empty().insert(StripSet::BODY);
         let default_items = collect(
-            std::slice::from_ref(&path),
-            CategorySelection::default(),
+            &with_custom_strip(std::slice::from_ref(&path), keep_tests),
             &Config::default(),
         )
-        .expect("default");
+        .expect("keep tests");
         assert!(
-            !default_items
+            default_items
                 .first()
                 .expect("one")
                 .content
                 .contains("mod tests")
         );
 
-        let with_tests = collect(
-            std::slice::from_ref(&path),
-            sel(None, None, Some(true)),
+        let strip_tests = StripSet::empty()
+            .insert(StripSet::TESTS)
+            .insert(StripSet::BODY);
+        let no_items = collect(
+            &with_custom_strip(std::slice::from_ref(&path), strip_tests),
             &Config::default(),
         )
-        .expect("with tests");
-        assert!(
-            with_tests
-                .first()
-                .expect("one")
-                .content
-                .contains("mod tests")
-        );
-
-        let no_tests = collect(
-            std::slice::from_ref(&path),
-            sel(None, None, Some(false)),
-            &Config::default(),
-        )
-        .expect("no tests");
-        let no_item = no_tests.first().expect("one");
+        .expect("strip tests");
+        let no_item = no_items.first().expect("one");
         assert!(!no_item.content.contains("mod tests"));
         assert!(no_item.content.contains("pub fn add"));
     }
@@ -228,26 +200,28 @@ mod tests {
     fn collect_drops_comments_when_requested() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let src = "/// kept when included\n\
-                   pub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n\
-                   // trailing note\n";
+                    pub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n\
+                    // trailing note\n";
         let path = write_file(tmp.path(), "a.rs", src);
 
+        let keep_comments = StripSet::empty().insert(StripSet::BODY);
         let with_comments = collect(
-            std::slice::from_ref(&path),
-            sel(Some(true), None, None),
+            &with_custom_strip(std::slice::from_ref(&path), keep_comments),
             &Config::default(),
         )
-        .expect("with comments");
+        .expect("keep comments");
         let with_item = with_comments.first().expect("one");
         assert!(with_item.content.contains("/// kept when included"));
         assert!(with_item.content.contains("// trailing note"));
 
+        let strip_comments = StripSet::empty()
+            .insert(StripSet::COMMENTS)
+            .insert(StripSet::BODY);
         let no_comments = collect(
-            std::slice::from_ref(&path),
-            sel(Some(false), None, None),
+            &with_custom_strip(std::slice::from_ref(&path), strip_comments),
             &Config::default(),
         )
-        .expect("no comments");
+        .expect("strip comments");
         let no_item = no_comments.first().expect("one");
         assert!(!no_item.content.contains("kept when included"));
         assert!(no_item.content.contains("pub fn add"));
@@ -257,15 +231,15 @@ mod tests {
     fn collect_drops_imports_when_requested() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let src = "use std::collections::HashMap;\n\
-                   pub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n";
+                    pub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n";
         let path = write_file(tmp.path(), "a.rs", src);
 
+        let keep_imports = StripSet::empty().insert(StripSet::BODY);
         let with_imports = collect(
-            std::slice::from_ref(&path),
-            CategorySelection::default(),
+            &with_custom_strip(std::slice::from_ref(&path), keep_imports),
             &Config::default(),
         )
-        .expect("with imports");
+        .expect("keep imports");
         assert!(
             with_imports
                 .first()
@@ -274,14 +248,32 @@ mod tests {
                 .contains("use std::collections::HashMap")
         );
 
+        let strip_imports = StripSet::empty()
+            .insert(StripSet::IMPORTS)
+            .insert(StripSet::BODY);
         let no_imports = collect(
-            std::slice::from_ref(&path),
-            sel(None, Some(false), None),
+            &with_custom_strip(std::slice::from_ref(&path), strip_imports),
             &Config::default(),
         )
-        .expect("no imports");
+        .expect("strip imports");
         let no_item = no_imports.first().expect("one");
         assert!(!no_item.content.contains("use std::collections::HashMap"));
         assert!(no_item.content.contains("pub fn add"));
+    }
+
+    #[test]
+    fn collect_keeps_bodies_when_not_stripped() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = write_file(
+            tmp.path(),
+            "a.rs",
+            "fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n",
+        );
+        let keep_bodies = StripSet::empty();
+        let items = collect(&with_custom_strip(&[path], keep_bodies), &Config::default())
+            .expect("keep bodies");
+        let item = items.first().expect("one");
+        assert!(item.content.contains("lhs + rhs"), "body kept");
+        assert!(!item.content.contains("{}"), "no elision marker");
     }
 }

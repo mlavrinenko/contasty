@@ -25,6 +25,7 @@
       "type": "string",
       "enum": [
         "always",
+        "body",
         "tests",
         "comments",
         "imports"

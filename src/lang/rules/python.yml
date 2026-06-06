@@ -9,6 +9,7 @@ rules:
   # Elide every function / method body (a `block`). Class bodies are kept so
   # method signatures survive; only the nested `function_definition` bodies go.
   - action: elide
+    when: body
     field: body
     rule:
       kind: function_definition
@@ -18,6 +19,7 @@ rules:
   # `{}` reads naturally for a dict (an empty list/set becomes an empty dict —
   # syntactically valid, intent-clear enough for context).
   - action: elide
+    when: body
     field: right
     min-bytes: elide-min
     rule:

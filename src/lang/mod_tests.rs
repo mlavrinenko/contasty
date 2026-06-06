@@ -93,6 +93,7 @@ fn registry_strips_a_rust_file() {
             false,
             false,
             false,
+            true,
             &CompactConfig::default(),
         )
         .expect("strip");
@@ -119,6 +120,7 @@ fn drop_tests_removes_cfg_test_module() {
             true,
             false,
             false,
+            true,
             &CompactConfig::default(),
         )
         .expect("strip");
@@ -154,6 +156,7 @@ fn keep_tests_keeps_cfg_test_module() {
             false,
             false,
             false,
+            true,
             &CompactConfig::default(),
         )
         .expect("strip");
@@ -174,6 +177,7 @@ fn drop_tests_removes_top_level_test_function() {
             true,
             false,
             false,
+            true,
             &CompactConfig::default(),
         )
         .expect("strip");
@@ -199,6 +203,7 @@ fn drop_tests_absorbs_other_attributes_on_the_test_module() {
             true,
             false,
             false,
+            true,
             &CompactConfig::default(),
         )
         .expect("strip");
@@ -231,6 +236,7 @@ fn drop_comments_removes_line_block_and_doc_comments() {
             false,
             true,
             false,
+            true,
             &CompactConfig::default(),
         )
         .expect("strip");
@@ -273,6 +279,7 @@ fn keep_comments_keeps_everything() {
             false,
             false,
             false,
+            true,
             &CompactConfig::default(),
         )
         .expect("strip");
@@ -291,6 +298,7 @@ fn drop_imports_removes_use_declarations() {
             Path::new("x.rs"),
             false,
             false,
+            true,
             true,
             &CompactConfig::default(),
         )
@@ -321,6 +329,7 @@ fn elides_const_static_type_values_above_threshold() {
             false,
             false,
             false,
+            true,
             &CompactConfig::default(),
         )
         .expect("strip");
@@ -347,7 +356,7 @@ fn keeps_values_below_elide_threshold() {
         max_string_bytes: 256,
     };
     let stripped = lang
-        .strip(src, Path::new("x.rs"), false, false, false, &compact)
+        .strip(src, Path::new("x.rs"), false, false, false, true, &compact)
         .expect("strip");
     assert!(
         stripped.contains("const N: u32 = 7"),
@@ -367,7 +376,7 @@ fn truncates_strings_above_threshold() {
         max_string_bytes: 8,
     };
     let stripped = lang
-        .strip(src, Path::new("x.rs"), false, false, false, &compact)
+        .strip(src, Path::new("x.rs"), false, false, false, true, &compact)
         .expect("strip");
     assert!(stripped.contains("const MSG"), "const dropped: {stripped}");
     assert!(

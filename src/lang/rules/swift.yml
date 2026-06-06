@@ -12,6 +12,7 @@ rules:
   # Protocol requirements carry no `body` field and are left verbatim. Computed
   # properties (`var x: T { ... }`) use a separate `computed_property` and are kept.
   - action: elide
+    when: body
     field: body
     rule:
       any:

@@ -27,6 +27,7 @@ fn strip_rust(reg: &Registry, src: &str) -> String {
             false,
             false,
             false,
+            true,
             &CompactConfig::default(),
         )
         .expect("strip")

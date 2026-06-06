@@ -8,6 +8,7 @@
 language: html
 rules:
   - action: elide
+    when: body
     rule:
       kind: raw_text
       inside:

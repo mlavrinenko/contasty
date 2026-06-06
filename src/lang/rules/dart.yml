@@ -8,6 +8,7 @@ rules:
   # verbatim (their `function_body` has no `block` child), mirroring the C#/Swift
   # handling.
   - action: elide
+    when: body
     rule:
       kind: block
       inside:

@@ -14,6 +14,7 @@ rules:
   # `= expr` expression body (elides to `{}` too, a valid block body). `abstract` /
   # `expect` functions carry no `function_body` and are left verbatim.
   - action: elide
+    when: body
     rule:
       kind: function_body
 

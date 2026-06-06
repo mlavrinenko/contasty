@@ -7,6 +7,7 @@ rules:
   # i.e. `{ ... }` → `{}`). State-variable initializers are kept (no brace value
   # literal to swap for the generic `{}` marker).
   - action: elide
+    when: body
     field: body
     rule:
       any:

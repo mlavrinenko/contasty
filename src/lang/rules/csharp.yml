@@ -15,6 +15,7 @@ rules:
   # Expression-bodied members (`=> expr`) use an `arrow_expression_clause`, not a
   # `block`, and abstract / interface members have no body — both left verbatim.
   - action: elide
+    when: body
     rule:
       kind: block
 

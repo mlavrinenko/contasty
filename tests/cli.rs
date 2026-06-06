@@ -40,7 +40,7 @@ fn cli_ignores_non_source_files() {
 }
 
 #[test]
-fn cli_drops_comments_by_default_and_keeps_them_with_include() {
+fn cli_drops_comments_by_default_and_keeps_them_with_strip_none() {
     let tmp = tempfile::tempdir().expect("tempdir");
     fs::write(
         tmp.path().join("sample.rs"),
@@ -59,7 +59,7 @@ fn cli_drops_comments_by_default_and_keeps_them_with_include() {
 
     Command::cargo_bin("contasty")
         .expect("binary")
-        .arg("--include=comments")
+        .arg("--strip=none")
         .arg(tmp.path())
         .assert()
         .success()
@@ -89,7 +89,7 @@ fn cli_renders_json_with_format_flag() {
 }
 
 #[test]
-fn cli_exclude_imports_drops_use() {
+fn cli_strip_imports_drops_use() {
     let tmp = tempfile::tempdir().expect("tempdir");
     fs::write(
         tmp.path().join("sample.rs"),
@@ -99,7 +99,7 @@ fn cli_exclude_imports_drops_use() {
 
     Command::cargo_bin("contasty")
         .expect("binary")
-        .arg("--exclude=imports")
+        .arg("--strip=imports,body")
         .arg(tmp.path())
         .assert()
         .success()
@@ -108,7 +108,7 @@ fn cli_exclude_imports_drops_use() {
 }
 
 #[test]
-fn cli_exclude_all_then_include_comments() {
+fn cli_strip_all_then_remove_body() {
     let tmp = tempfile::tempdir().expect("tempdir");
     fs::write(
         tmp.path().join("sample.rs"),
@@ -116,37 +116,35 @@ fn cli_exclude_all_then_include_comments() {
     )
     .expect("write");
 
-    // comments kept, imports excluded (all excluded first, then comments re-included)
     Command::cargo_bin("contasty")
         .expect("binary")
-        .arg("--exclude=all")
-        .arg("--include=comments")
+        .arg("--strip=all,!body")
         .arg(tmp.path())
         .assert()
         .success()
-        .stdout(contains("/// doc"))
-        .stdout(contains("use std::fmt").not());
+        .stdout(contains("/// doc").not())
+        .stdout(contains("use std::fmt").not())
+        .stdout(contains("greet() {}"));
 }
 
 #[test]
-fn cli_include_everything_then_exclude_imports() {
+fn cli_strip_none_keeps_everything() {
     let tmp = tempfile::tempdir().expect("tempdir");
     fs::write(
         tmp.path().join("sample.rs"),
-        "/// doc\nuse std::fmt;\npub fn greet() {}\n",
+        "/// doc\nuse std::fmt;\npub fn greet() { println!(\"hi\"); }\n",
     )
     .expect("write");
 
-    // comments kept, imports excluded
     Command::cargo_bin("contasty")
         .expect("binary")
-        .arg("--include=everything")
-        .arg("--exclude=imports")
+        .arg("--strip=none")
         .arg(tmp.path())
         .assert()
         .success()
         .stdout(contains("/// doc"))
-        .stdout(contains("use std::fmt").not());
+        .stdout(contains("use std::fmt"))
+        .stdout(contains("println!"));
 }
 
 #[test]
@@ -160,14 +158,14 @@ fn cli_everything_alias_equals_all() {
 
     let all_out = Command::cargo_bin("contasty")
         .expect("binary")
-        .arg("--include=all")
+        .arg("--strip=all")
         .arg(tmp.path())
         .output()
         .expect("all");
 
     let everything_out = Command::cargo_bin("contasty")
         .expect("binary")
-        .arg("--include=everything")
+        .arg("--strip=everything")
         .arg(tmp.path())
         .output()
         .expect("everything");
@@ -198,7 +196,6 @@ fn cli_expands_glob_internally() {
     let tmp = tempfile::tempdir().expect("tempdir");
     fs::write(tmp.path().join("a.rs"), "pub fn a() {}\n").expect("write a");
     fs::write(tmp.path().join("b.rs"), "pub fn b() {}\n").expect("write b");
-    // a supported non-match: present in the dir but outside the `*.rs` glob.
     fs::write(tmp.path().join("other.py"), "def other():\n    pass\n").expect("write py");
 
     Command::cargo_bin("contasty")
@@ -327,7 +324,6 @@ fn cli_ignore_interleave_mode_switch() {
     fs::write(tmp.path().join("kept.rs"), "pub fn kept() {}\n").expect("write kept");
     fs::write(tmp.path().join("ignored.rs"), "pub fn ignored() {}\n").expect("write ignored");
 
-    // First arg uses enable (default), second uses reverse.
     Command::cargo_bin("contasty")
         .expect("binary")
         .arg(tmp.path().join("kept.rs"))
@@ -346,7 +342,6 @@ fn cli_query_ignore_field_wins() {
     fs::write(tmp.path().join(".gitignore"), "generated/\n").expect("write gitignore");
     fs::create_dir_all(tmp.path().join("generated")).expect("mkdir generated");
     fs::write(tmp.path().join("generated/foo.rs"), "pub fn foo() {}\n").expect("write generated");
-    // Query sets ignore: disable so it can reach the gitignored directory.
     fs::write(
         tmp.path().join("gen.cty.yaml"),
         "ignore: disable\nrules: |\n  generated\n",
@@ -359,4 +354,121 @@ fn cli_query_ignore_field_wins() {
         .assert()
         .success()
         .stdout(contains("foo.rs"));
+}
+
+#[test]
+fn cli_strip_per_path_applies_independently() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    fs::create_dir_all(tmp.path().join("src")).expect("mkdir src");
+    // Distinct doc/import per file so each path's strip is observable.
+    fs::write(
+        tmp.path().join("src/a.rs"),
+        "/// doc-a\nuse std::fmt;\npub fn a() {}\n",
+    )
+    .expect("write a");
+    fs::write(
+        tmp.path().join("src/b.rs"),
+        "/// doc-b\nuse std::io;\npub fn b() {}\n",
+    )
+    .expect("write b");
+
+    // a.rs: strip all (doc + import gone). b.rs: strip none (both kept).
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg("--strip=all")
+        .arg(tmp.path().join("src/a.rs"))
+        .arg("--strip=none")
+        .arg(tmp.path().join("src/b.rs"))
+        .assert()
+        .success()
+        .stdout(contains("doc-a").not())
+        .stdout(contains("use std::fmt").not())
+        .stdout(contains("doc-b"))
+        .stdout(contains("use std::io"));
+}
+
+#[test]
+fn cli_default_strips_bodies() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    fs::write(
+        tmp.path().join("sample.rs"),
+        "pub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n",
+    )
+    .expect("write");
+
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg(tmp.path())
+        .assert()
+        .success()
+        .stdout(contains("{}"))
+        .stdout(contains("lhs + rhs").not());
+}
+
+#[test]
+fn cli_strip_none_keeps_bodies() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    fs::write(
+        tmp.path().join("sample.rs"),
+        "pub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n",
+    )
+    .expect("write");
+
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg("--strip=none")
+        .arg(tmp.path())
+        .assert()
+        .success()
+        .stdout(contains("lhs + rhs"))
+        .stdout(contains("{}").not());
+}
+
+#[test]
+fn cli_config_strip_overrides_builtin_default_when_no_flag() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    fs::write(
+        tmp.path().join("sample.rs"),
+        "/// doc\nuse std::fmt;\npub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n",
+    )
+    .expect("write");
+    // Config strips comments only — imports and bodies must survive without a
+    // `--strip` flag (proves config layering reaches the pipeline).
+    let config = tmp.path().join("contasty.toml");
+    fs::write(&config, "strip = [\"comments\"]\n").expect("write config");
+
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg("--config")
+        .arg(&config)
+        .arg(tmp.path().join("sample.rs"))
+        .assert()
+        .success()
+        .stdout(contains("/// doc").not())
+        .stdout(contains("use std::fmt"))
+        .stdout(contains("lhs + rhs"));
+}
+
+#[test]
+fn cli_flag_overrides_config_strip() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    fs::write(
+        tmp.path().join("sample.rs"),
+        "use std::fmt;\npub fn add(lhs: i32, rhs: i32) -> i32 { lhs + rhs }\n",
+    )
+    .expect("write");
+    // Config would keep imports/bodies, but an explicit --strip replaces it.
+    let config = tmp.path().join("contasty.toml");
+    fs::write(&config, "strip = [\"comments\"]\n").expect("write config");
+
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg("--config")
+        .arg(&config)
+        .arg("--strip=imports,body")
+        .arg(tmp.path().join("sample.rs"))
+        .assert()
+        .success()
+        .stdout(contains("use std::fmt").not())
+        .stdout(contains("lhs + rhs").not());
 }

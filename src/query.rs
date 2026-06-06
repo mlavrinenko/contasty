@@ -15,6 +15,7 @@ use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use serde::Deserialize;
 
 use crate::AppError;
+use crate::config::{StripConfig, StripSet};
 use crate::inputs::{IgnoreMode, is_query_file, normalize};
 
 /// Parsed query file.
@@ -27,6 +28,8 @@ struct QueryFile {
     rules: Option<Rules>,
     #[serde(default)]
     import: Vec<ImportEntry>,
+    #[serde(default)]
+    strip: Option<StripConfig>,
 }
 
 /// Selection patterns: inline string, list of strings, or external file.
@@ -54,12 +57,15 @@ const fn default_required() -> bool {
     true
 }
 
-/// Resolve a query file to a set of source-file paths.
+/// Resolve a query file to a set of source-file paths and its strip set.
 ///
 /// Parses the YAML, builds a gitignore matcher from its `rules`, walks
 /// candidates with mode-appropriate gitignore filtering, filters through
 /// the matcher (with parent-directory checking), then recurses into
 /// `import` entries. Results are unioned and deduped.
+///
+/// Returns the resolved files and the query's own `strip` set (empty if
+/// unset). The caller unions this with the CLI strip set.
 ///
 /// The query's own `ignore` field (if set) overrides the ambient `mode`;
 /// otherwise the ambient mode applies.
@@ -73,10 +79,10 @@ pub fn resolve_query(
     mode: IgnoreMode,
     cwd: &Path,
     visited: &mut BTreeSet<PathBuf>,
-) -> Result<Vec<PathBuf>, AppError> {
+) -> Result<(Vec<PathBuf>, StripSet), AppError> {
     let abs_query = normalize(&make_absolute(query_path, cwd));
     if !visited.insert(abs_query.clone()) {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), StripSet::empty()));
     }
     let content = fs::read_to_string(&abs_query).map_err(|err| {
         AppError::Query(format!(
@@ -87,6 +93,7 @@ pub fn resolve_query(
     let parsed: QueryFile = serde_yaml::from_str(&content).map_err(|err| {
         AppError::Query(format!("bad query file `{}`: {err}", abs_query.display()))
     })?;
+    let query_strip = parsed.strip.map_or(StripSet::empty(), |sc| sc.0);
     let effective_mode = parsed.ignore.unwrap_or(mode);
     let query_dir = abs_query
         .parent()
@@ -100,7 +107,7 @@ pub fn resolve_query(
         let imported = resolve_import(entry, mode, &query_dir, cwd, visited)?;
         out.extend(imported);
     }
-    Ok(out.into_iter().collect())
+    Ok((out.into_iter().collect(), query_strip))
 }
 
 /// Build a gitignore matcher from `rules`, walk candidates with
@@ -137,7 +144,8 @@ fn apply_rules(
             continue;
         }
         if is_query_file(path) {
-            out.extend(resolve_query(path, mode, cwd, visited)?);
+            let (files, _) = resolve_query(path, mode, cwd, visited)?;
+            out.extend(files);
         } else {
             out.push(normalize(path));
         }
@@ -221,7 +229,8 @@ fn resolve_import(
         }
         return Ok(Vec::new());
     }
-    resolve_query(&abs, mode, cwd, visited)
+    let (files, _) = resolve_query(&abs, mode, cwd, visited)?;
+    Ok(files)
 }
 
 /// Split a multiline string into non-empty, non-comment lines.

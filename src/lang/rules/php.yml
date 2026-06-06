@@ -8,6 +8,7 @@ rules:
   # Elide function / method / closure bodies (each a `compound_statement`).
   # Abstract method declarations have no `body` field and are left verbatim.
   - action: elide
+    when: body
     field: body
     rule:
       any:

@@ -11,6 +11,7 @@ language: go
 rules:
   # Elide every free-function and method body (a `block`).
   - action: elide
+    when: body
     field: body
     rule:
       any:

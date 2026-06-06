@@ -66,10 +66,12 @@ struct CompiledRule {
 }
 
 /// Which gated rule groups run, plus the size thresholds for this strip pass.
+#[allow(clippy::struct_excessive_bools)]
 struct StripOptions<'cfg> {
     drop_tests: bool,
     drop_comments: bool,
     drop_imports: bool,
+    drop_bodies: bool,
     compact: &'cfg CompactConfig,
 }
 
@@ -135,6 +137,7 @@ impl From<RuleAction> for Action {
 enum Gate {
     #[default]
     Always,
+    Body,
     Tests,
     Comments,
     Imports,
@@ -144,6 +147,7 @@ impl Gate {
     const fn enabled(self, opts: &StripOptions) -> bool {
         match self {
             Self::Always => true,
+            Self::Body => opts.drop_bodies,
             Self::Tests => opts.drop_tests,
             Self::Comments => opts.drop_comments,
             Self::Imports => opts.drop_imports,
@@ -204,13 +208,14 @@ impl Language {
         })
     }
 
-    /// Strip elidable nodes from `source`. The `drop_*` flags gate the test,
-    /// comment, and import rules respectively.
+    /// Strip elidable nodes from `source`. The `drop_*` flags gate the body,
+    /// test, comment, and import rules respectively.
     ///
     /// # Errors
     ///
     /// [`AppError::ParseFailed`] if tree-sitter cannot produce a parse tree.
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::fn_params_excessive_bools)]
     pub fn strip(
         &self,
         source: &str,
@@ -218,6 +223,7 @@ impl Language {
         drop_tests: bool,
         drop_comments: bool,
         drop_imports: bool,
+        drop_bodies: bool,
         compact: &CompactConfig,
     ) -> Result<String, AppError> {
         let grep = AstGrep::try_new(source, self.lang).map_err(|_| AppError::ParseFailed {
@@ -227,6 +233,7 @@ impl Language {
             drop_tests,
             drop_comments,
             drop_imports,
+            drop_bodies,
             compact,
         };
         let ranges = self.collect(&grep, &opts);

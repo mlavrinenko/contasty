@@ -52,12 +52,11 @@ fn custom_grammar_strips_via_rule_file_no_rebuild() {
 
     let config = Config::load(Some(&tmp.path().join("contasty.toml")), tmp.path());
     let files = contasty::resolve(
-        &[(tmp.path().to_path_buf(), contasty::IgnoreMode::Enable)],
+        &[(tmp.path().to_path_buf(), contasty::IgnoreMode::Enable, None)],
         tmp.path(),
     )
     .expect("resolve");
-    let items = contasty::collect(&files, contasty::CategorySelection::default(), &config)
-        .expect("collect");
+    let items = contasty::collect(&files, &config).expect("collect");
 
     let jsonc = items
         .iter()

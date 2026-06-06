@@ -17,7 +17,7 @@ mod render;
 pub mod stats;
 mod walk;
 
-pub use config::CategorySelection;
+pub use config::{Category, FileStrip, StripSet};
 pub use inputs::{IgnoreMode, resolve};
 pub use lang::{Registry, rules_schema_json};
 pub use render::{render_json, render_markdown};

@@ -29,6 +29,14 @@ coverage, so anything there is untested by default.
 Minimum 70% coverage enforced via `cargo-tarpaulin`. Run `just cover` to check.
 `main.rs` is excluded — keep it thin and move testable logic to `lib.rs`.
 
+## Testing
+
+Any config-layered or CLI-driven behavior needs at least one end-to-end
+assertion in `tests/cli.rs` (or another integration test) that exercises the
+whole pipeline, not only a unit test of the resolver function in isolation.
+A function can be written, unit-tested, and still never wired into `collect` /
+`main`; only an end-to-end test catches that gap.
+
 ## File Size Limits
 
 - Rust files: 500 lines max

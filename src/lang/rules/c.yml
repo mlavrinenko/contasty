@@ -7,6 +7,7 @@ rules:
   # Elide every function body (a `compound_statement`). Prototypes (`int f(void);`)
   # carry no `body` field and are left verbatim.
   - action: elide
+    when: body
     field: body
     rule:
       kind: function_definition
@@ -15,6 +16,7 @@ rules:
   # already-brace-delimited `initializer_list`, which elides to `{}` (zero-init) —
   # a valid C initializer. Scalar initializers (`int x = 0;`) are left intact.
   - action: elide
+    when: body
     field: value
     min-bytes: elide-min
     rule:

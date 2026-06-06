@@ -2,20 +2,17 @@
 #
 # All fields are optional; defaults are shown below.
 
-# Category inclusion: what to keep in the stripped output.
-# Built-in defaults: comments and tests excluded, imports included.
-# Override cross-language defaults under [include], then refine per language
-# under [languages.<lang>.include].
+# Strip categories: what to strip from the output.
+# Built-in defaults: comments, imports, and body stripped; tests kept.
+# Override cross-language defaults under [strip], then refine per language
+# under [languages.<lang>].
 #
-# [include]
-# comments = false
-# imports  = true
-# tests    = false
+# strip = ["comments", "imports", "body"]
 #
-# [languages.rust.include]
-# comments = true    # keep doc comments for Rust only
+# [languages.rust]
+# strip = ["comments", "body"]    # keep imports for Rust only
 
-# All per-language config lives under [languages.<lang>]: category inclusion,
+# All per-language config lives under [languages.<lang>]: strip categories,
 # plus (optionally) a dynamic grammar and a rule extend/override. Built-in
 # languages (rust, php) need none of the grammar/rule fields.
 #
@@ -27,9 +24,7 @@
 # libraryPath = "grammars/jsonc.so"   # or a per-target-triple map (see docs)
 # extensions  = ["jsonc"]
 # rules       = "rules/jsonc.yml"
-#
-#   [languages.jsonc.include]
-#   tests = true
+# strip       = ["tests"]
 #
 # Rule extend/override — point any language at a user rule file (see
 # docs/custom-rules.md). At most one of `extend` / `override` per entry.
