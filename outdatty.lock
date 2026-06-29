@@ -6,8 +6,10 @@ groups:
       src/lib.rs: 6d914ace9abb25ec12966c4667da7c561c166334a1e732619a3bf1984f23ae3f
       src/main.rs: 321ed72119eea4cdc00e156bb8e5c753402ea30955948e40cc38aa0d51ae7915
     dependents:
-      README.md: ddfe04fb1ab7c9214bb355e4752c3359f26b17bc73b3d66a4624039c8326564a
-      www/index.html: 4446280c87a8b81004d446233853da648f9a51b238e93117635b76d883330dcc
+      README.md: 1ad70a802b53a7879e722af032a0ecfd5a714a9381c290789c9c57a9138a42b2
+      skills/contasty/SKILL.md: df6d6a4ee63646f6d960d527187174c34471862ff7b439569892e26e18ae7bf0
+      skills/contasty/references/cli.md: 8296ce5334949240c778da493f1d6926f9f7f0435147a50d782e7cfc836cefb4
+      www/index.html: 92b0e568dac4f411e2ddfd162699ce4ba69a63796ac0520158b48d5831d50192
   custom-rules-docs:
     source:
       src/config.rs: c891c96605ce28751afb9a0aca9cc635dea9c59969865c661dec0bb860a3def2
@@ -40,4 +42,4 @@ groups:
     source:
       Cargo.toml: de0c380051f2ece4af648ff20fab68e6fb2a5572b2c86344b4b7aec86a7b94d5
     dependents:
-      CHANGELOG.md: c36a73c4ec47d30ac7428a6ef6e6ae112faed933ca92f20f230ec791a5ac9d47
+      CHANGELOG.md: 4cce01a2daf2fe9e449bd5afb0cbaf8698ed8e1f6c46ee45f74eed9293e3c7b0

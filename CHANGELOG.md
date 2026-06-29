@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Installable agent skill at `skills/contasty/` (`SKILL.md` + `references/cli.md`
+  + reproducible `evals/`). Teaches coding agents to reach for contasty when they
+  need a codebase's shape — overview, public API, where something is declared —
+  scoped to the question, and to open real files only when a body is needed.
+  Documented in the README "Agent skill" section.
+
 ## [0.1.0] - 2026-06-06
 
 First public release.

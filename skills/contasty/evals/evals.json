@@ -1,0 +1,46 @@
+{
+  "skill_name": "contasty",
+  "evals": [
+    {
+      "id": 0,
+      "name": "new-repo-overview",
+      "prompt": "I just cloned the repo at /home/tank/projects/home/contasty and I'm completely new to it. Give me a high-level tour: what does this project do, and what are the main modules under src/ and their responsibilities? I don't need implementation details yet, just the lay of the land.",
+      "expected_output": "A concise architecture overview: correctly states contasty strips code bodies/values to produce compact LLM context, and names the real top-level modules under src/ (e.g. main, lib, inputs, query, config, render, stats, lang) with a short responsibility each. No invented modules.",
+      "files": [],
+      "assertions": [
+        "States the purpose correctly: contasty strips/elides code bodies (and values/long strings) to produce compact context for an LLM/agent",
+        "Names at least 4 real src modules from {inputs, query, config, render, stats, lang, walk, main, lib}",
+        "Every module/file named under src/ actually exists (no hallucinated modules)",
+        "Ran the contasty CLI during exploration (commands.log shows a contasty invocation)"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "library-api-surface",
+      "prompt": "I want to use the contasty library crate (source at /home/tank/projects/home/contasty/src) as a dependency. What's its public API surface — the main public types and the top-level functions I'd call, with their signatures? I don't care about the internals of each function, just the surface I program against.",
+      "expected_output": "Lists real public items with accurate signatures: top-level fns like resolve, collect, render_markdown, render_json, and types like StripSet/Category/FileStrip/Stripped plus the stats module. Signatures match the source. No hallucinated exports.",
+      "files": [],
+      "assertions": [
+        "Lists the real top-level public functions resolve and collect, plus at least one of render_markdown / render_json",
+        "Mentions real public types from {StripSet, Category, FileStrip, IgnoreMode, Stripped, Registry, AppError}",
+        "Reported signatures match the source (parameters/return types not invented)",
+        "No hallucinated public exports (every named item is actually pub in the crate)",
+        "Ran the contasty CLI during exploration (commands.log shows a contasty invocation)"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "trace-strip-flow",
+      "prompt": "In the codebase at /home/tank/projects/home/contasty, trace how the --strip category selection flows from the CLI flag through to where source files actually get stripped. Name the key types and functions on that path. I need the structure, not a deep read of every function body.",
+      "expected_output": "Correctly traces: CLI --strip (src/main.rs) parsed via StripSet::parse_list, grouped by path_groups, into resolve, then collect (src/walk.rs) applying the StripSet. References real symbols and files that exist in the repo.",
+      "files": [],
+      "assertions": [
+        "Identifies the --strip flag is parsed into a StripSet (e.g. via StripSet::parse_list)",
+        "Names path_groups as the step grouping paths with their strip set in main.rs",
+        "Traces through to collect (src/walk.rs) as where files are actually stripped",
+        "All referenced files and symbols exist in the repo (no hallucinated paths/functions)",
+        "Ran the contasty CLI during exploration (commands.log shows a contasty invocation)"
+      ]
+    }
+  ]
+}

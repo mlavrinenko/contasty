@@ -4,6 +4,12 @@ limits:
 
 count_mode: total
 
+# README carries the user-facing tour plus an extra Agent skill section; allow
+# it a little more room than the default Markdown limit.
+overrides:
+  - pattern: "**/README.md"
+    limit: 240
+
 exclude_dirs:
   - target
   - archive

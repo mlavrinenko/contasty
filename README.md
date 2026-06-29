@@ -169,6 +169,16 @@ Optional per-language post-strip reformatting (cosmetic, off by default) is
 configured with the `reformat` key — embedded Topiary or a shell-out command.
 See [docs/reformatting.md](docs/reformatting.md).
 
+## Agent skill
+
+contasty ships a ready-to-install skill for coding agents (Claude Code and
+compatible tools) at [skills/contasty/](skills/contasty/). It teaches the agent
+to reach for contasty when it needs a codebase's shape — an overview, a module's
+public API, where something is declared — instead of reading every file in full,
+opening real files only when it actually needs a body. Copy the
+`skills/contasty/` directory into your agent's skills folder; for Claude Code
+that is `~/.claude/skills/`.
+
 ## Adding a language
 
 contasty matches AST nodes with [ast-grep](https://ast-grep.github.io/) rules,
