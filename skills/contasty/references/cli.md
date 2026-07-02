@@ -75,15 +75,17 @@ contasty A --ignore=disable B --ignore=enable C      # per-path switching
 ## Output formats
 
 Lines (default): per file, a bare relative-path header, then each surviving line
-as `N: <line>` at its original number. Elided bodies drop out, leaving a gap in
-the numbering — a signature at line 42 whose next symbol is line 60 has its body
-at lines 43–59, which you can read straight back from the file. Blank lines are
-omitted; files are separated by a blank line.
+verbatim as `N: <line>` at its original number. A multi-line body keeps its
+opening line and drops out below, so the gap in the numbering is its span — a
+signature at line 42 whose next symbol is line 60 has its body at lines 43–59,
+which you read straight back from the file. Only a cut confined to one line (a
+one-line body, a mid-line value or truncated string) is marked in place with `…`.
+Blank lines are omitted; files are separated by a blank line.
 
 ```
 src/checkout.rs
-12: pub fn checkout(cart: &Cart, user: &User) -> Result<Receipt> …
-42: pub fn refund(order: &Order) -> Result<()> …
+12: pub fn checkout(cart: &Cart, user: &User) -> Result<Receipt> {
+42: pub fn refund(order: &Order) -> Result<()> {
 ```
 
 Markdown (`--format=markdown`): one document, a fenced code block per file under

@@ -2,10 +2,13 @@
 //!
 //! Where [`super::splice`] produces a clean skeleton with elided bodies replaced
 //! by `{}`, this renders each surviving source line verbatim, prefixed with its
-//! original 1-based line number (`N: <line>`). Elided ranges collapse to a
-//! single sentinel where the cut begins; their interior lines simply drop out,
-//! so the gap in the numbering is the span an agent can read back from the file.
-//! Blank and fully-stripped lines are omitted.
+//! original 1-based line number (`N: <line>`). A multi-line elided body keeps its
+//! opening line untouched (the cut is shifted to the first newline inside it), so
+//! its interior lines simply drop out and the gap in the numbering is the span an
+//! agent can read back from the file — no marker on real code. Only a cut that
+//! lives inside a single line (a one-line body, a mid-line value or string) is
+//! replaced in place with a sentinel, since printing it verbatim would leak the
+//! very content the strip removes. Blank and fully-stripped lines are omitted.
 
 use std::fmt::Write;
 
@@ -19,7 +22,7 @@ const TRUNCATE: &str = "\"…\"";
 
 /// Render `source` under `ranges` as `N: <line>` rows.
 pub(super) fn number_lines(source: &str, ranges: &[(usize, usize, Action)]) -> String {
-    let effective = resolve(ranges);
+    let effective = keep_opening_line(source, resolve(ranges));
     let mut out = String::with_capacity(source.len());
     let mut offset = 0_usize;
     let mut first = 0_usize;
@@ -42,6 +45,26 @@ pub(super) fn number_lines(source: &str, ranges: &[(usize, usize, Action)]) -> S
         offset += piece.len();
     }
     out
+}
+
+/// Shift each multi-line `Elide` range to begin at its first interior newline, so
+/// the opening line survives verbatim and only whole interior lines drop out.
+/// Single-line elisions and every delete/truncate keep their exact span — those
+/// are the cuts that must be marked in place because verbatim would leak them.
+fn keep_opening_line(
+    source: &str,
+    ranges: Vec<(usize, usize, Action)>,
+) -> Vec<(usize, usize, Action)> {
+    ranges
+        .into_iter()
+        .map(|(start, end, action)| match action {
+            Action::Elide => source
+                .get(start..end)
+                .and_then(|span| span.find('\n'))
+                .map_or((start, end, action), |rel| (start + rel, end, action)),
+            _ => (start, end, action),
+        })
+        .collect()
 }
 
 /// Build the surviving text of the byte span `[ls, ce)`: verbatim outside any
@@ -90,15 +113,26 @@ mod tests {
     }
 
     #[test]
-    fn elided_body_collapses_to_a_gap() {
-        // `fn f() { .. }` — elide the body block (bytes of `{ a; b; }`).
+    fn multiline_body_keeps_opening_line_verbatim() {
+        // `fn f() { .. }` — elide the multi-line body block (`{ a; b; }`).
         let src = "fn f() {\n    a;\n    b;\n}\nfn g() {}\n";
         let brace = src.find('{').expect("brace");
         let close = src.find("}\n").expect("close") + 1;
         let ranges = [(brace, close, Action::Elide)];
         let out = number_lines(src, &ranges);
-        // line 1 keeps its signature with a sentinel; 2-4 vanish; g at line 5.
-        assert_eq!(out, "1: fn f() …\n5: fn g() {}\n");
+        // Opening line stays verbatim (real `{`), 2-4 vanish, g kept at line 5.
+        assert_eq!(out, "1: fn f() {\n5: fn g() {}\n");
+    }
+
+    #[test]
+    fn one_line_body_gets_a_marker_so_it_does_not_leak() {
+        // `fn id(x) { x }` — the whole body sits on one line; verbatim would
+        // print `{ x }`, so an inline cut is marked instead.
+        let src = "fn id(x: i32) -> i32 { x }\n";
+        let brace = src.find('{').expect("brace");
+        let ranges = [(brace, src.len() - 1, Action::Elide)];
+        let out = number_lines(src, &ranges);
+        assert_eq!(out, "1: fn id(x: i32) -> i32 …\n");
     }
 
     #[test]

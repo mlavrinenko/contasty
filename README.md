@@ -26,9 +26,9 @@ pub fn checkout(cart: &Cart, user: &User) -> Result<Receipt> {
 ```
 
 ```
-// after — comments/imports gone, body elided, signature kept
+// after — comments/imports gone, body elided, signature kept verbatim
 checkout.rs
-1: pub fn checkout(cart: &Cart, user: &User) -> Result<Receipt> …
+1: pub fn checkout(cart: &Cart, user: &User) -> Result<Receipt> {
 ```
 
 Each language is driven by a YAML rule file matched against the AST, not by

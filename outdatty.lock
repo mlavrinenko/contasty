@@ -6,9 +6,9 @@ groups:
       src/lib.rs: 380da25bfcb01cb741ffbd20b515097a4a521fbe0bfb9a644becd83f8df63604
       src/main.rs: 466041e10df96bd86d3fa7bcef51706a9fdeba3440dfb55c33215b2f41033bcd
     dependents:
-      README.md: b40c46c972de1fc8b78635360dab94664865b3879326621441f888a7f2af4883
+      README.md: a4e54e32d39a1ed9e967b188780af08c73aa6e8934138373ffe8f902a8c0a81a
       skills/contasty/SKILL.md: 087881fb6d264b38fe9e9861b5f66011f15f422958bf2c79f02568db603af9bd
-      skills/contasty/references/cli.md: 7b898352f298fd805cebe910aad1f4a2c43f05a80a253dfeaf4224fbf4e2163a
+      skills/contasty/references/cli.md: 90f38258f99bd4887d4a5446530fc6a82f72ca19b6e0e16be4ad6ff67272148b
       www/index.html: a8d5deabd4cfbf97a0ab50720994600326f14d877bab0038cfe46ab767b2f3a7
   custom-rules-docs:
     source:

@@ -422,8 +422,8 @@ fn cli_lines_format_is_default_with_numbers_and_path_header() {
         .assert()
         .success()
         .stdout(contains("sample.rs\n"))
-        .stdout(contains("1: pub fn add(lhs: i32, rhs: i32) -> i32"))
-        .stdout(contains("…"))
+        // Multi-line body: opening line stays verbatim (real `{`), body gone.
+        .stdout(contains("1: pub fn add(lhs: i32, rhs: i32) -> i32 {"))
         .stdout(contains("lhs + rhs").not())
         .stdout(contains("```").not());
 }
