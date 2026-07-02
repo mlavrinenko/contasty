@@ -6,11 +6,16 @@
 # you do. Tune these groups to match where contasty's coupled files live.
 groups:
   # The CLI surface (commands, flags, behaviour) is documented by hand. Touching
-  # the entry point or top-level library flags the user-facing docs.
+  # the entry point, top-level library flags, or the renderers that decide what
+  # the output actually looks like flags the user-facing docs — README, www, and
+  # the skill both transcribe literal example output.
   - name: cli-docs
     source:
       - src/main.rs
       - src/lib.rs
+      - src/render.rs
+      - src/lang/lines.rs
+      - src/lang/splice.rs
     dependents:
       - README.md
       - www/index.html

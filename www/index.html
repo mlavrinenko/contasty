@@ -163,11 +163,7 @@
       42%, 78%  { max-height: 0; opacity: 0; filter: blur(3px); transform: translateY(-6px); }
       100%      { max-height: 1.7em; opacity: 1; filter: blur(0); transform: translateY(0); }
     }
-    @keyframes brace {
-      0%,18% { opacity: 0; } 50%,78% { opacity: 1; } 100% { opacity: 0; }
-    }
     .hero-editor .cl.body { overflow: hidden; max-height: 1.7em; animation: reduce 6s ease-in-out infinite; }
-    .hero-editor .closed { opacity: 0; animation: brace 6s ease-in-out infinite; }
     .drip {
       position: absolute; left: 50%; bottom: -10px; width: 8px; height: 8px; border-radius: 50%;
       background: var(--caramel); opacity: 0; animation: drop 6s ease-in-out infinite;
@@ -276,7 +272,6 @@
       html { scroll-behavior: auto; }
       .sprinkles i, .drip { animation: none; }
       .hero-editor .cl.body { animation: none; max-height: 0; opacity: 0; overflow: hidden; }
-      .hero-editor .closed { animation: none; opacity: 1; }
       .skim.off { transition: none; }
     }
   </style>
@@ -305,7 +300,7 @@
             <span class="gumdrop b"></span><span class="gumdrop h"></span><span class="gumdrop m"></span>
             <span class="name">checkout.rs</span><span class="tag">contasty</span>
           </div>
-          <div class="code"><div class="cl"><span class="n">1</span><span class="t"><span class="kw">pub fn</span> <span class="fn">checkout</span>(cart: <span class="ty">&amp;Cart</span>, user: <span class="ty">&amp;User</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Receipt</span>&gt; {<span class="closed pu">}</span></span></div><div class="cl body"><span class="n">2</span><span class="t">    <span class="kw">let</span> total = cart.total();</span></div><div class="cl body"><span class="n">3</span><span class="t">    <span class="fn">charge</span>(user, total)?;</span></div><div class="cl body"><span class="n">4</span><span class="t">    <span class="ty">Ok</span>(<span class="ty">Receipt</span>::new(total))</span></div><div class="cl body"><span class="n">5</span><span class="t"><span class="pu">}</span></span></div></div>
+          <div class="code"><div class="cl"><span class="n">1</span><span class="t"><span class="kw">pub fn</span> <span class="fn">checkout</span>(cart: <span class="ty">&amp;Cart</span>, user: <span class="ty">&amp;User</span>) -&gt; <span class="ty">Result</span>&lt;<span class="ty">Receipt</span>&gt; {</span></div><div class="cl body"><span class="n">2</span><span class="t">    <span class="kw">let</span> total = cart.total();</span></div><div class="cl body"><span class="n">3</span><span class="t">    <span class="fn">charge</span>(user, total)?;</span></div><div class="cl body"><span class="n">4</span><span class="t">    <span class="ty">Ok</span>(<span class="ty">Receipt</span>::new(total))</span></div><div class="cl body"><span class="n">5</span><span class="t"><span class="pu">}</span></span></div></div>
         </div>
         <span class="drip" aria-hidden="true"></span>
       </div>
@@ -341,11 +336,8 @@
           </figure>
           <figure>
             <p class="cap">contasty output</p>
-            <div class="editor"><pre><code><span class="kw">pub fn</span> <span class="fn">checkout</span>(c: <span class="ty">&amp;Cart</span>) -&gt; <span class="ty">Receipt</span> {}
-
-
-
-</code></pre></div>
+            <div class="editor"><pre><code><span class="pu">checkout.rs</span>
+3: <span class="kw">pub fn</span> <span class="fn">checkout</span>(c: <span class="ty">&amp;Cart</span>) -&gt; <span class="ty">Receipt</span> {</code></pre></div>
           </figure>
         </div>
         <p class="arrow">↓ comments &amp; imports gone, body reduced, signature kept ↓</p>

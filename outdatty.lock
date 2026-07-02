@@ -3,13 +3,16 @@ algorithm: blake3
 groups:
   cli-docs:
     source:
+      src/lang/lines.rs: 34200581058e3be1945beaab2595a182f0da746a4e7dd54ba4a8b6e346605f30
+      src/lang/splice.rs: b772267010231958bad157dab0f2bc73670c729bfb428e9eb9b0f1acca72747f
       src/lib.rs: 380da25bfcb01cb741ffbd20b515097a4a521fbe0bfb9a644becd83f8df63604
       src/main.rs: 466041e10df96bd86d3fa7bcef51706a9fdeba3440dfb55c33215b2f41033bcd
+      src/render.rs: e27c91a591a09d11556b04294197ec30a2fc95d02be60626bc1c1ba25fab3012
     dependents:
       README.md: a4e54e32d39a1ed9e967b188780af08c73aa6e8934138373ffe8f902a8c0a81a
       skills/contasty/SKILL.md: 087881fb6d264b38fe9e9861b5f66011f15f422958bf2c79f02568db603af9bd
       skills/contasty/references/cli.md: 90f38258f99bd4887d4a5446530fc6a82f72ca19b6e0e16be4ad6ff67272148b
-      www/index.html: a8d5deabd4cfbf97a0ab50720994600326f14d877bab0038cfe46ab767b2f3a7
+      www/index.html: 10fa5de3bdae172262270b5e93a45073135b14047c0efff6d546366031a0a8cd
   custom-rules-docs:
     source:
       src/config.rs: af94f25c99f20c1b34eb3ca778c11752196dc83286e9dc061e800472e8e50d05
@@ -37,4 +40,4 @@ groups:
     source:
       Cargo.toml: f63038fa68304412de6614a7f25b9b9c9017dccb272d00b031b1b1f105c85d9f
     dependents:
-      CHANGELOG.md: bfc65345712d2f93e294f07006fd839fd5a59c5da60a38b1f5b8e3678e6ed362
+      CHANGELOG.md: 0a295614e80f16e04275230c72df10fa37140458b0f709a649b1fdaf2a213e79
