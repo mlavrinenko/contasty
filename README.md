@@ -13,8 +13,8 @@ Strips executable lines from your code to prepare tasty context for your agent.
 Walks a directory (respecting `.gitignore`), parses each supported source file
 with [ast-grep](https://ast-grep.github.io/), and elides function bodies,
 constant values, and long string literals — keeping declarations, signatures,
-and types intact. The result prints as a single Markdown document, ready to
-paste into an LLM context window.
+and types intact. The default output is a line-numbered per-file dump built
+for agents, ready to paste into an LLM context window.
 
 ```rust
 // before
@@ -25,9 +25,10 @@ pub fn checkout(cart: &Cart, user: &User) -> Result<Receipt> {
 }
 ```
 
-```rust
+```
 // after — comments/imports gone, body elided, signature kept
-pub fn checkout(cart: &Cart, user: &User) -> Result<Receipt> {}
+checkout.rs
+1: pub fn checkout(cart: &Cart, user: &User) -> Result<Receipt> …
 ```
 
 Each language is driven by a YAML rule file matched against the AST, not by
@@ -68,10 +69,11 @@ contasty --strip=all src/               # strip everything (alias: everything)
 contasty --strip=all,!body src/         # strip all except bodies
 contasty --strip=none src/              # strip nothing (keep all categories)
 contasty --strip=none tests/            # per-path: keep everything in tests/
-contasty --format=json src/            # emit a JSON bundle instead of Markdown
+contasty src/                          # default: line-numbered lines format
+contasty --format=markdown src/        # reparseable Markdown document
+contasty --format=json src/            # emit a JSON bundle instead
 contasty --stats src/                  # print compactization statistics
 contasty --config path.toml src/       # use a specific contasty.toml
-contasty --no-reformat src/            # skip all post-strip reformatting
 contasty --ignore=disable src/         # include .gitignored files too
 contasty --ignore=reverse src/         # only .gitignored files
 contasty A --ignore=disable B --ignore=enable C  # per-path mode switching
@@ -81,8 +83,12 @@ Multiple arguments resolve to a deduped, sorted union of source files. A folder 
 walked `.gitignore`-aware; a glob is expanded internally (quote it) and a glob over
 directories walks each subtree. A glob matching nothing warns; a missing path errors.
 
-Output defaults to Markdown. Pass `--format=json` for a pretty-printed JSON bundle
-shaped as `{ "base": <dir>, "files": [{ "path", "lang", "content" }] }`.
+Output defaults to `lines`: a bare relative-path header per file, then each
+surviving source line as `N: <line>` with its original line number, so an
+elided body shows up as a gap you can read straight back from the file with
+`Read path offset=N`. Pass `--format=markdown` for a reparseable Markdown
+document with fenced code blocks, or `--format=json` for a pretty-printed JSON
+bundle shaped as `{ "base": <dir>, "files": [{ "path", "lang", "content" }] }`.
 
 Four categories control what is stripped:
 
@@ -131,10 +137,9 @@ is stronger at different things.
 | Gate comments (keep / drop)            | [yes — per-language toggle](src/lang/rules/python.yml)                  | [yes — removeComments](https://repomix.com/guide/comment-removal)                           |
 | Gate imports (keep / drop)             | [yes — --strip=imports](src/lang/rules/python.yml)                      | no (imports kept)                                                                           |
 | Gate tests (keep / drop)               | [yes — --strip=tests](src/lang/rules/python.yml)                        | no                                                                                          |
-| Stripped-region output                 | [valid empty bodies, reparseable](tests/fixtures/go/sample.stripped.go) | [⋮---- placeholder markers](https://repomix.com/guide/code-compress)                        |
-| Optional reformat of result            | [yes — Topiary / shell-out](docs/reformatting.md)                       | no                                                                                          |
+| Stripped-region output                 | [line-anchored by default; reparseable `{}` skeleton via `--format=markdown`](tests/fixtures/go/sample.stripped.go) | [⋮---- placeholder markers](https://repomix.com/guide/code-compress)                        |
 | Runtime                                | [single static binary](Cargo.toml)                                      | [Node.js](https://github.com/yamadashy/repomix)                                             |
-| Output formats                         | [Markdown, JSON](src/render.rs)                                         | [XML, Markdown, JSON, plain](https://repomix.com/guide/output)                              |
+| Output formats                         | [Lines (default), Markdown, JSON](src/render.rs)                        | [XML, Markdown, JSON, plain](https://repomix.com/guide/output)                              |
 | Token counting                         | no (by design)                                                          | [yes, multi-tokenizer](https://repomix.com/guide/command-line-options)                      |
 | Secret scanning                        | no                                                                      | [yes](https://repomix.com/guide/security)                                                   |
 | Git integration (diffs, history)       | no                                                                      | [yes](https://repomix.com/guide/command-line-options)                                       |
@@ -164,10 +169,6 @@ strip = ["comments", "body"]              # keep imports for Rust only
 ```
 
 CLI `--strip` overrides config for all languages. Config loads first; CLI wins.
-
-Optional per-language post-strip reformatting (cosmetic, off by default) is
-configured with the `reformat` key — embedded Topiary or a shell-out command.
-See [docs/reformatting.md](docs/reformatting.md).
 
 ## Agent skill
 

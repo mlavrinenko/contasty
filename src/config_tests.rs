@@ -190,38 +190,6 @@ fn builtin_language_block_is_not_dynamic() {
 }
 
 #[test]
-fn reformat_parses_named_mode() {
-    let config: Config =
-        toml::from_str("[languages.rust]\nreformat = \"topiary\"\n").expect("parse");
-    let rust = config.languages.get("rust").expect("rust entry");
-    assert!(matches!(
-        rust.reformat,
-        Some(Reformat::Mode(ReformatMode::Topiary))
-    ));
-}
-
-#[test]
-fn reformat_parses_command_vector() {
-    let toml = "[languages.typescript]\n\
-        reformat = { command = [\"prettier\", \"--parser\", \"typescript\"] }\n";
-    let config: Config = toml::from_str(toml).expect("parse");
-    let entry = config.languages.get("typescript").expect("ts entry");
-    match &entry.reformat {
-        Some(Reformat::Command { command }) => {
-            assert_eq!(command, &["prettier", "--parser", "typescript"]);
-        }
-        other => panic!("expected a command vector, got {other:?}"),
-    }
-}
-
-#[test]
-fn reformat_absent_is_none() {
-    let config: Config = toml::from_str("[languages.php]\nstrip = [\"tests\"]\n").expect("parse");
-    let php = config.languages.get("php").expect("php entry");
-    assert!(php.reformat.is_none());
-}
-
-#[test]
 fn both_extend_and_override_is_a_rule_source_error() {
     let config: Config =
         toml::from_str("[languages.rust]\nextend = \"a.yml\"\noverride = \"b.yml\"\n")

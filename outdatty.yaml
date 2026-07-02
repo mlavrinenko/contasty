@@ -52,16 +52,9 @@ groups:
     dependents:
       - docs/custom-rules.md
 
-  # The built-in language registry and the reformatting backends each have a
-  # matching doc page.
+  # The built-in language registry has a matching doc page.
   - name: language-docs
     source:
       - src/lang/mod.rs
     dependents:
       - docs/languages.md
-
-  - name: reformatting-docs
-    source:
-      - src/lang/reformat.rs
-    dependents:
-      - docs/reformatting.md

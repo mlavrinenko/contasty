@@ -325,7 +325,8 @@
           contasty walks a directory (respecting <code>.gitignore</code>), parses each supported
           source file with <a href="https://ast-grep.github.io/">ast-grep</a>, and elides function
           bodies, constant values, and long strings — keeping declarations, signatures, and types
-          intact. The result is one Markdown (or JSON) bundle, ready to paste into an LLM context window.
+          intact. The default output is one line-numbered <code>lines</code> bundle, ready to paste
+          into an LLM context window — <code>--format=markdown</code> or <code>--format=json</code> also available.
         </p>
         <div class="twocol" style="margin-top:1.4rem">
           <figure>
@@ -393,7 +394,7 @@
             </div>
             <div class="step" data-step="body">
               <h3><span class="pill">body</span> stripped by default</h3>
-              <p>Function, method, and closure bodies elided to an empty <code>{}</code> — still reparseable.</p>
+              <p>Function, method, and closure bodies elided; default output is line-numbered with a gap where the body was. <code>--format=markdown</code> gives an empty <code>{}</code> skeleton, still reparseable.</p>
             </div>
             <div class="step" data-step="tests">
               <h3><span class="pill kept">tests</span> kept by default</h3>
@@ -493,7 +494,7 @@ cargo install contasty
 nix run github:mlavrinenko/contasty -- src/
 nix profile install github:mlavrinenko/contasty
 
-<span class="cm"># strip a tree, write Markdown context</span>
+<span class="cm"># strip a tree, write line-numbered context</span>
 contasty src/ &gt; context.md
 
 <span class="cm"># default-strip src/, keep tests/ whole, JSON output</span>
@@ -519,7 +520,6 @@ contasty src/ --strip=none tests/ --format=json</code></pre>
             <tr><td>Add a language, no rebuild</td><td class="y">yes</td><td class="n">no</td></tr>
             <tr><td>Extend / override strip rules</td><td class="y">yes</td><td class="n">no</td></tr>
             <tr><td>Gate comments / imports / tests / body</td><td class="y">yes</td><td class="n">partial</td></tr>
-            <tr><td>Optional reformat of result</td><td class="y">yes</td><td class="n">no</td></tr>
             <tr><td>Runtime</td><td class="y">single static binary</td><td class="n">Node.js</td></tr>
             <tr><td>Token counting</td><td class="n">no (by design)</td><td class="y">yes, multi-tokenizer</td></tr>
             <tr><td>Remote repos / MCP server</td><td class="n">no</td><td class="y">yes</td></tr>
@@ -557,15 +557,9 @@ contasty src/ --strip=none tests/ --format=json</code></pre>
             <a href="https://github.com/mlavrinenko/contasty/blob/main/docs/languages.md">docs/languages.md →</a>
           </div>
           <div class="jar">
-            <div class="emoji" aria-hidden="true">🍮</div>
-            <h3>Reformatting</h3>
-            <p>Optional cosmetic tidy of the stripped output via embedded Topiary or a shell-out.</p>
-            <a href="https://github.com/mlavrinenko/contasty/blob/main/docs/reformatting.md">docs/reformatting.md →</a>
-          </div>
-          <div class="jar">
             <div class="emoji" aria-hidden="true">🍬</div>
-            <h3>Markdown or JSON</h3>
-            <p><code>--format=json</code> emits <code>{ base, files: [{ path, lang, content }] }</code>.</p>
+            <h3>Lines, Markdown, or JSON</h3>
+            <p>Line-numbered <code>lines</code> by default; <code>--format=markdown</code> for fenced code blocks, <code>--format=json</code> for <code>{ base, files: [{ path, lang, content }] }</code>.</p>
             <a href="https://github.com/mlavrinenko/contasty#usage">usage →</a>
           </div>
           <div class="jar">

@@ -3,8 +3,7 @@
 //! Adding a language is a two-step recipe and needs no per-language Rust logic:
 //!
 //! 1. Drop a `rules/<lang>.yml` ast-grep rule set beside this module.
-//! 2. Register it in [`Registry::new`] with a display name (and an optional
-//!    post-strip formatter).
+//! 2. Register it in [`Registry::new`] with a display name.
 //!
 //! Each rule selects an anchor node, optionally descends into a named field,
 //! then maps to an [`Action`]. Matching is delegated to ast-grep; this module
@@ -22,16 +21,15 @@ use serde::Deserialize;
 use crate::AppError;
 use crate::config::{CompactConfig, Config};
 use crate::lang::dynamic::Lang;
-use crate::lang::reformat::Reformatter;
 
+mod attrs;
 mod dynamic;
+mod lines;
 mod overrides;
-mod reformat;
-mod shellout;
 mod splice;
-#[cfg(feature = "topiary")]
-mod topiary;
 
+use attrs::expand_attribute_to_item;
+use lines::number_lines;
 use splice::splice;
 
 type Doc = StrDoc<Lang>;
@@ -39,15 +37,19 @@ type AstNode<'r> = ast_grep_core::Node<'r, Doc>;
 
 /// A registered language: a tree-sitter grammar plus its compiled rule set.
 pub struct Language {
-    /// Markdown fence info-string (e.g. `"rust"`).
+    /// Language display name, also the Markdown fence info-string (e.g. `"rust"`).
     pub name: &'static str,
     lang: Lang,
     rules: Vec<CompiledRule>,
-    /// Post-strip reformatter applied after splicing. `None` by default; the
-    /// `reformat` config key opts a language into Topiary or a shell-out
-    /// command. A failure falls back to the unformatted splice rather than
-    /// failing the whole file.
-    reformat: Reformatter,
+}
+
+/// Both stripped views of one file, produced from a single parse: the spliced
+/// skeleton (Markdown / JSON / stats) and the line-numbered body (`lines`).
+pub struct StripViews {
+    /// Skeleton with elided bodies collapsed to `{}` markers.
+    pub skeleton: String,
+    /// `N: <line>` body: kept lines with original numbers, cuts left as gaps.
+    pub numbered: String,
 }
 
 /// One compiled strip rule: an ast-grep matcher plus what to do with its hits.
@@ -192,7 +194,7 @@ impl Language {
     /// [`AppError::RuleParse`] if the YAML is malformed, [`AppError::Rule`] if
     /// the declared language is unknown or any rule fails to compile against the
     /// grammar.
-    fn from_rules(name: &'static str, yaml: &str, reformat: Reformatter) -> Result<Self, AppError> {
+    fn from_rules(name: &'static str, yaml: &str) -> Result<Self, AppError> {
         let file: RuleFile = serde_yaml::from_str(yaml)?;
         let lang = Lang::from_str(&file.language)?;
         let rules = file
@@ -200,16 +202,37 @@ impl Language {
             .into_iter()
             .map(|spec| compile_rule(lang, spec))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self {
-            name,
-            lang,
-            rules,
-            reformat,
-        })
+        Ok(Self { name, lang, rules })
     }
 
-    /// Strip elidable nodes from `source`. The `drop_*` flags gate the body,
-    /// test, comment, and import rules respectively.
+    /// Parse `source` and collect its strip ranges under the given drop flags.
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::fn_params_excessive_bools)]
+    fn ranges(
+        &self,
+        source: &str,
+        path: &Path,
+        drop_tests: bool,
+        drop_comments: bool,
+        drop_imports: bool,
+        drop_bodies: bool,
+        compact: &CompactConfig,
+    ) -> Result<Vec<(usize, usize, Action)>, AppError> {
+        let grep = AstGrep::try_new(source, self.lang).map_err(|_| AppError::ParseFailed {
+            path: path.to_path_buf(),
+        })?;
+        let opts = StripOptions {
+            drop_tests,
+            drop_comments,
+            drop_imports,
+            drop_bodies,
+            compact,
+        };
+        Ok(self.collect(&grep, &opts))
+    }
+
+    /// Strip elidable nodes from `source`, returning the spliced skeleton. The
+    /// `drop_*` flags gate the body, test, comment, and import rules.
     ///
     /// # Errors
     ///
@@ -226,19 +249,50 @@ impl Language {
         drop_bodies: bool,
         compact: &CompactConfig,
     ) -> Result<String, AppError> {
-        let grep = AstGrep::try_new(source, self.lang).map_err(|_| AppError::ParseFailed {
-            path: path.to_path_buf(),
-        })?;
-        let opts = StripOptions {
+        let ranges = self.ranges(
+            source,
+            path,
             drop_tests,
             drop_comments,
             drop_imports,
             drop_bodies,
             compact,
-        };
-        let ranges = self.collect(&grep, &opts);
-        let spliced = splice(source, &ranges);
-        Ok(self.reformat.apply(&spliced))
+        )?;
+        Ok(splice(source, &ranges))
+    }
+
+    /// Both stripped views from a single parse: the spliced skeleton and the
+    /// line-numbered body. Used by the render pipeline so one parse feeds every
+    /// output format.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::ParseFailed`] if tree-sitter cannot produce a parse tree.
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::fn_params_excessive_bools)]
+    pub fn strip_views(
+        &self,
+        source: &str,
+        path: &Path,
+        drop_tests: bool,
+        drop_comments: bool,
+        drop_imports: bool,
+        drop_bodies: bool,
+        compact: &CompactConfig,
+    ) -> Result<StripViews, AppError> {
+        let ranges = self.ranges(
+            source,
+            path,
+            drop_tests,
+            drop_comments,
+            drop_imports,
+            drop_bodies,
+            compact,
+        )?;
+        Ok(StripViews {
+            skeleton: splice(source, &ranges),
+            numbered: number_lines(source, &ranges),
+        })
     }
 
     fn collect(&self, grep: &AstGrep<Doc>, opts: &StripOptions) -> Vec<(usize, usize, Action)> {
@@ -311,58 +365,6 @@ fn push_range(
     }
 }
 
-/// Given an attribute node, walk to its decorated item, absorbing any adjacent
-/// attribute siblings. Returns the byte range covering the whole `#[a] #[b]
-/// item` group.
-fn expand_attribute_to_item(attr: &AstNode<'_>) -> (usize, usize) {
-    let mut start = attr.range().start;
-    let mut cursor = attr.clone();
-    while let Some(prev) = named_prev(&cursor) {
-        if !is_attribute(&prev) {
-            break;
-        }
-        start = prev.range().start;
-        cursor = prev;
-    }
-    let mut end = attr.range().end;
-    let mut cursor = attr.clone();
-    while let Some(next) = named_next(&cursor) {
-        end = next.range().end;
-        let absorb = is_attribute(&next);
-        cursor = next;
-        if !absorb {
-            break;
-        }
-    }
-    (start, end)
-}
-
-fn is_attribute(node: &AstNode<'_>) -> bool {
-    node.kind().as_ref() == "attribute_item"
-}
-
-fn named_prev<'r>(node: &AstNode<'r>) -> Option<AstNode<'r>> {
-    let mut prev = node.prev();
-    while let Some(candidate) = prev {
-        if candidate.is_named() {
-            return Some(candidate);
-        }
-        prev = candidate.prev();
-    }
-    None
-}
-
-fn named_next<'r>(node: &AstNode<'r>) -> Option<AstNode<'r>> {
-    let mut next = node.next();
-    while let Some(candidate) = next {
-        if candidate.is_named() {
-            return Some(candidate);
-        }
-        next = candidate.next();
-    }
-    None
-}
-
 /// Set of languages contasty knows how to strip.
 pub struct Registry {
     langs: Vec<Language>,
@@ -376,9 +378,7 @@ impl Registry {
     /// Returns [`AppError::Rule`] / [`AppError::RuleParse`] if any embedded rule
     /// set fails to parse or compile. This is effectively a build-time bug.
     pub fn new() -> Result<Self, AppError> {
-        // Every built-in registers with `Reformatter::None`: the engine ships no
-        // per-language formatter; reformatting is opt-in (see reformat.rs).
-        let builtin = |name, yaml| Language::from_rules(name, yaml, Reformatter::None);
+        let builtin = |name, yaml| Language::from_rules(name, yaml);
         Ok(Self {
             langs: vec![
                 builtin("rust", include_str!("rules/rust.yml"))?,
@@ -415,17 +415,16 @@ impl Registry {
     /// Build the registry with the built-ins plus every configured custom
     /// grammar, then apply the per-language rule overrides. Registers the dynamic
     /// grammars (`[languages.<lang>]` entries with a `libraryPath`, once),
-    /// compiles each one's rule file, extends/replaces any language whose entry
-    /// sets `extend` / `override`, then resolves each entry's `reformat` backend
-    /// (unless `--no-reformat`). Paths resolve against the config file's dir.
+    /// compiles each one's rule file, and extends/replaces any language whose
+    /// entry sets `extend` / `override`. Paths resolve against the config file's
+    /// dir.
     ///
     /// # Errors
     ///
     /// [`AppError::CustomLang`] if a grammar fails to load, lacks `extensions` /
     /// `rules`, or its rule file is unreadable; [`AppError::Config`] if an
     /// `extend` / `override` entry is malformed (both mode keys, unknown
-    /// language, unreadable file, mismatched `language:`), or a `reformat` entry
-    /// names an unknown language, an empty command, or unavailable Topiary;
+    /// language, unreadable file, mismatched `language:`);
     /// [`AppError::Rule`] / [`AppError::RuleParse`] if any rule file is malformed
     /// or references kinds the grammar lacks.
     pub fn with_config(config: &Config) -> Result<Self, AppError> {
@@ -447,16 +446,9 @@ impl Registry {
             // unloads), so leaking its display name to `'static` is consistent
             // and lets it share `Language`'s built-in storage.
             let leaked: &'static str = Box::leak(name.clone().into_boxed_str());
-            registry
-                .langs
-                .push(Language::from_rules(leaked, &yaml, Reformatter::None)?);
+            registry.langs.push(Language::from_rules(leaked, &yaml)?);
         }
         registry.apply_overrides(&config.languages, base)?;
-        if config.no_reformat {
-            registry.disable_reformat();
-        } else {
-            registry.apply_reformatters(&config.languages)?;
-        }
         Ok(registry)
     }
 

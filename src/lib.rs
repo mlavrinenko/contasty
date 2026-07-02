@@ -20,7 +20,7 @@ mod walk;
 pub use config::{Category, FileStrip, StripSet};
 pub use inputs::{IgnoreMode, resolve};
 pub use lang::{Registry, rules_schema_json};
-pub use render::{render_json, render_markdown};
+pub use render::{render_json, render_lines, render_markdown};
 pub use walk::{Stripped, collect};
 
 /// Errors produced by the contasty library.

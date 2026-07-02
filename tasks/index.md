@@ -34,3 +34,5 @@ history once cleaned up.
 - [x] [11 — Query files (`*.cty.yaml`): saved gitignore-style selectors](11-query-files.md)
 - [x] [12 — gitignore modes: `--ignore=<mode>` (find-style, per-path)](12-gitignore-modes.md)
 - [x] [13 — Selection vocabulary: `--strip=<categories>` + query `strip:`](13-strip-vocabulary.md)
+- [x] [14 — End-user agent skill](14-end-user-skill.md)
+- [x] [15 — Agent-native `lines` output + drop reformatting](15-lines-format.md)

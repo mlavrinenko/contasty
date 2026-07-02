@@ -3,28 +3,28 @@ algorithm: blake3
 groups:
   cli-docs:
     source:
-      src/lib.rs: 6d914ace9abb25ec12966c4667da7c561c166334a1e732619a3bf1984f23ae3f
-      src/main.rs: 321ed72119eea4cdc00e156bb8e5c753402ea30955948e40cc38aa0d51ae7915
+      src/lib.rs: 380da25bfcb01cb741ffbd20b515097a4a521fbe0bfb9a644becd83f8df63604
+      src/main.rs: 466041e10df96bd86d3fa7bcef51706a9fdeba3440dfb55c33215b2f41033bcd
     dependents:
-      README.md: 1ad70a802b53a7879e722af032a0ecfd5a714a9381c290789c9c57a9138a42b2
-      skills/contasty/SKILL.md: df6d6a4ee63646f6d960d527187174c34471862ff7b439569892e26e18ae7bf0
-      skills/contasty/references/cli.md: 8296ce5334949240c778da493f1d6926f9f7f0435147a50d782e7cfc836cefb4
-      www/index.html: 92b0e568dac4f411e2ddfd162699ce4ba69a63796ac0520158b48d5831d50192
+      README.md: b40c46c972de1fc8b78635360dab94664865b3879326621441f888a7f2af4883
+      skills/contasty/SKILL.md: 087881fb6d264b38fe9e9861b5f66011f15f422958bf2c79f02568db603af9bd
+      skills/contasty/references/cli.md: 7b898352f298fd805cebe910aad1f4a2c43f05a80a253dfeaf4224fbf4e2163a
+      www/index.html: a8d5deabd4cfbf97a0ab50720994600326f14d877bab0038cfe46ab767b2f3a7
   custom-rules-docs:
     source:
-      src/config.rs: c891c96605ce28751afb9a0aca9cc635dea9c59969865c661dec0bb860a3def2
+      src/config.rs: af94f25c99f20c1b34eb3ca778c11752196dc83286e9dc061e800472e8e50d05
       src/lang/overrides.rs: 439da832c7bda3cbfec0d83e42d00f19be867c1f6b0c292cd989b0d2c551bf93
     dependents:
       docs/custom-rules.md: fb73d6d8bd7a8942b0f09e5f5eb31bf16a5a709d2a339f26435b0a804d5a4b8f
   dev-docs:
     source:
-      Justfile: 111ba126df84c63a27f4bd72badd9426b1f0af73b357abfe12514f68538502c7
+      Justfile: 58409a78a1c000e164bf9df8ed8c32e4a58e65536e6cc6f5e79a3cc12e989fb7
       flake.nix: 2974bcdadbb6ce2222776449e821db57a09541aeff3955946d52ae36244ddb28
     dependents:
       CONTRIBUTING.md: 77f87aa6915721ca2e2469ca21ad536cc56b53e3802dee2bd72c43ed7ef3787a
   language-docs:
     source:
-      src/lang/mod.rs: d44a2022ecf693ae7dde5a8864cbad6f718808de2e4eb18a394d2d8c5b692dbb
+      src/lang/mod.rs: 00c49bc856a67bcc9fb09814dc293f2617a1b1360ac5916eb8cbbc530388e22f
     dependents:
       docs/languages.md: 259d39b84f4c3763b51c2fb3b84d97313ca10275c520af0a542f60d4e51e6a72
   query-docs:
@@ -33,13 +33,8 @@ groups:
       src/query.rs: 1aa4d1f4de2d85facb528bdb7e64d1c2348d0665de4cccfc1340a85ad40e1e68
     dependents:
       docs/queries.md: 6c26add6e51e1bb4a9229964caf663e20bcce596ba189397485c75fef135be9e
-  reformatting-docs:
-    source:
-      src/lang/reformat.rs: cf5c454e514702a0919688a2bdd63b0dcfe951cafef4de952e8564191795ac39
-    dependents:
-      docs/reformatting.md: 153cd02abfc37c4f6e0c042dcf258aa6ded617ea660227e145f93170c20d9144
   release-notes:
     source:
-      Cargo.toml: de0c380051f2ece4af648ff20fab68e6fb2a5572b2c86344b4b7aec86a7b94d5
+      Cargo.toml: f63038fa68304412de6614a7f25b9b9c9017dccb272d00b031b1b1f105c85d9f
     dependents:
-      CHANGELOG.md: 4cce01a2daf2fe9e449bd5afb0cbaf8698ed8e1f6c46ee45f74eed9293e3c7b0
+      CHANGELOG.md: bfc65345712d2f93e294f07006fd839fd5a59c5da60a38b1f5b8e3678e6ed362

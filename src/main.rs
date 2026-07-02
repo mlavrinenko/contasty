@@ -11,7 +11,9 @@ use contasty::inputs::IgnoreMode;
 /// Output format for the stripped bundle.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum OutputFormat {
-    /// Markdown document with per-file fenced code blocks (default).
+    /// Line-numbered per-file dump: `N: <line>` with gaps for cuts (default).
+    Lines,
+    /// Markdown document with per-file fenced code blocks.
     Markdown,
     /// Pretty-printed JSON bundle: `{ base, files: [{ path, lang, content }] }`.
     Json,
@@ -57,13 +59,9 @@ Examples:\n\
     #[arg(long)]
     stats: bool,
 
-    /// Output format for the stripped bundle. Markdown by default.
-    #[arg(long, value_enum, default_value = "markdown")]
+    /// Output format for the stripped bundle. Line-numbered by default.
+    #[arg(long, value_enum, default_value = "lines")]
     format: OutputFormat,
-
-    /// Disable all post-strip reformatting.
-    #[arg(long)]
-    no_reformat: bool,
 
     /// Path to a `contasty.toml` configuration file.
     #[arg(long)]
@@ -128,8 +126,7 @@ fn main() -> Result<()> {
     let m = Cli::command().get_matches();
     let cli = Cli::from_arg_matches(&m)?;
     let cwd = std::env::current_dir()?;
-    let mut config = Config::load(cli.config.as_deref(), &cwd);
-    config.no_reformat = cli.no_reformat;
+    let config = Config::load(cli.config.as_deref(), &cwd);
     let groups = path_groups(&m).map_err(|msg| anyhow::anyhow!("{msg}"))?;
     let files = contasty::resolve(&groups, &cwd)?;
     let items = contasty::collect(&files, &config)?;
@@ -138,6 +135,7 @@ fn main() -> Result<()> {
         print!("{report}");
     } else {
         let rendered = match cli.format {
+            OutputFormat::Lines => contasty::render_lines(&items),
             OutputFormat::Markdown => contasty::render_markdown(&items),
             OutputFormat::Json => contasty::render_json(&items),
         };

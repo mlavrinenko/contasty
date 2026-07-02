@@ -103,6 +103,30 @@ pub fn render_json(items: &[Stripped]) -> String {
     serde_json::to_string_pretty(&bundle).unwrap_or_default()
 }
 
+/// Render stripped files as the default line-numbered format.
+///
+/// Each file is a bare relative-path header (a leading `./` trimmed) followed by
+/// its `N: <line>` body; files are separated by a blank line. Files that stripped
+/// down to nothing are skipped. The line numbers are the original file's, so an
+/// agent can read a body straight back from the gap in the numbering.
+#[must_use]
+pub fn render_lines(items: &[Stripped]) -> String {
+    let mut out = String::new();
+    for item in items {
+        if item.numbered.is_empty() {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        let path = item.path.to_string_lossy();
+        let header = path.strip_prefix("./").unwrap_or(&path);
+        let _ = writeln!(out, "{header}");
+        out.push_str(&item.numbered);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -117,12 +141,14 @@ mod tests {
                 lang_name: "rust",
                 original: String::new(),
                 content: "pub fn greet() { /* ... */ }".to_owned(),
+                numbered: String::new(),
             },
             Stripped {
                 path: PathBuf::from("src/main.rs"),
                 lang_name: "rust",
                 original: String::new(),
                 content: "fn main() { /* ... */ }".to_owned(),
+                numbered: String::new(),
             },
         ];
         let md = render_markdown(&items);
@@ -144,12 +170,14 @@ mod tests {
                 lang_name: "rust",
                 original: String::new(),
                 content: "fn a() { /* ... */ }".to_owned(),
+                numbered: String::new(),
             },
             Stripped {
                 path: PathBuf::from("b.rs"),
                 lang_name: "rust",
                 original: String::new(),
                 content: "fn b() { /* ... */ }".to_owned(),
+                numbered: String::new(),
             },
         ];
         let md = render_markdown(&items);
@@ -170,12 +198,14 @@ mod tests {
                 lang_name: "rust",
                 original: String::new(),
                 content: "pub fn greet() {}".to_owned(),
+                numbered: String::new(),
             },
             Stripped {
                 path: PathBuf::from("src/main.rs"),
                 lang_name: "rust",
                 original: String::new(),
                 content: "fn main() {}".to_owned(),
+                numbered: String::new(),
             },
         ];
         let json = render_json(&items);
@@ -196,6 +226,31 @@ mod tests {
             .and_then(serde_json::Value::as_array)
             .expect("files array");
         assert!(files.is_empty());
+    }
+
+    #[test]
+    fn render_lines_headers_number_bodies_and_separate_files() {
+        let items = vec![
+            Stripped {
+                path: PathBuf::from("src/lib.rs"),
+                lang_name: "rust",
+                original: String::new(),
+                content: String::new(),
+                numbered: "1: pub fn greet() …\n".to_owned(),
+            },
+            Stripped {
+                path: PathBuf::from("src/main.rs"),
+                lang_name: "rust",
+                original: String::new(),
+                content: String::new(),
+                numbered: "1: fn main() …\n".to_owned(),
+            },
+        ];
+        let out = render_lines(&items);
+        assert_eq!(
+            out,
+            "src/lib.rs\n1: pub fn greet() …\n\nsrc/main.rs\n1: fn main() …\n"
+        );
     }
 
     #[test]

@@ -18,7 +18,10 @@ description: >-
 `contasty` walks a directory (respecting `.gitignore`), parses each source file,
 and elides the parts you rarely need for orientation — function bodies, constant
 values, long string literals, comments, imports — while keeping declarations,
-signatures, and types intact. It prints one Markdown document.
+signatures, and types intact. By default it prints a line-numbered per-file dump:
+each kept line as `N: <line>` at its original number, elided bodies left as gaps
+in the numbering. Those are the file's own line numbers, so the map doubles as an
+index — when you do need a body, read exactly the gap's lines, not the whole file.
 
 Why this matters: understanding a codebase's shape — its modules, types, public
 API, layering — does not require its implementation bodies. The payoff is
@@ -72,11 +75,12 @@ it, fall back to reading files directly — do not block the task on it.
    `contasty src/ > /tmp/contasty-context.md`, then read the file. A quick
    `contasty --stats <paths>` first confirms you aimed at the right scope and
    shows the reduction you are buying.
-3. Answer from the map. The stripped map is your working source — read it for the
-   types, signatures, and module layout. Open a file in full only when you need a
-   body you cannot get from its signature. Do not run contasty and then also
-   re-read the same files in full; that pays the token cost twice and throws away
-   the saving.
+3. Answer from the map, and navigate by its line numbers. The map is your working
+   source — read it for the types, signatures, and module layout. When you do need
+   an elided body, the gap tells you where: a signature at line 42 whose next
+   symbol is at line 60 means its body is lines 43–59, so read just that slice
+   (`offset`/`limit`) instead of the whole file. Do not run contasty and then
+   re-read whole files; that pays the token cost twice and throws away the saving.
 
 ## Selecting what to process
 
@@ -127,8 +131,10 @@ pass, then re-run with comments only on the narrower part where you need them.
 
 ## Other flags worth knowing
 
-- `--format=json` — emit `{ base, files: [{ path, lang, content }] }` instead of
-  Markdown, when you want to process the bundle programmatically.
+- `--format=markdown` — a reparseable Markdown document with fenced code blocks
+  (elided bodies shown as `{}`), for pasting to a human or another chat;
+  `--format=json` — a `{ base, files: [{ path, lang, content }] }` bundle for
+  programmatic use. Default is the line-numbered `lines` format above.
 - `--ignore=disable` — include `.gitignore`d files too; `--ignore=reverse` —
   only ignored files. Default respects `.gitignore`.
 - `--config path.toml` — use a specific `contasty.toml` (thresholds, custom
@@ -140,9 +146,9 @@ custom language rules.
 
 ## Pitfalls
 
-- The output has no bodies. Never quote it as evidence of what a function does
-  internally — only its signature and surrounding declarations are real. Open
-  the source file for logic.
+- The map has no bodies — only signatures and surrounding declarations are real.
+  Don't quote it as evidence of what a function does internally; when you need the
+  logic, use the line numbers to read that body's lines from the real file.
 - Languages without a body-elision rule still appear, just less compacted; the
   `--stats` reduction tells you how much you actually saved.
 - A glob must be quoted (`'src/**/*.rs'`) so contasty expands it; an unquoted

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-02
+
+### Changed
+
+- Default output is now the line-numbered `lines` format: a bare relative-path
+  header per file, then each kept line as `N: <line>` at its original number,
+  elided bodies left as gaps in the numbering. Built for agents — the numbers are
+  the file's own, so a tool can read an elided body straight back from the gap
+  instead of the whole file. The former Markdown output moves behind
+  `--format=markdown`; `--format=json` is unchanged.
+
+### Removed
+
+- Post-strip reformatting, wholesale: the `--no-reformat` flag, the `reformat`
+  config key, the embedded Topiary backend and shell-out formatter, the `topiary`
+  build feature and its dependencies, and `docs/reformatting.md`. Reformatting
+  rewrote kept lines and would desync the new line numbers from the file.
+
 ### Added
 
 - Installable agent skill at `skills/contasty/` (`SKILL.md` + `references/cli.md`

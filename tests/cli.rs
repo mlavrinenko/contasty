@@ -17,6 +17,7 @@ fn cli_strips_rust_function_body_and_renders_markdown() {
 
     Command::cargo_bin("contasty")
         .expect("binary")
+        .arg("--format=markdown")
         .arg(tmp.path())
         .assert()
         .success()
@@ -401,8 +402,30 @@ fn cli_default_strips_bodies() {
         .arg(tmp.path())
         .assert()
         .success()
-        .stdout(contains("{}"))
+        // Default `lines` format: numbered signature, body collapsed to a gap.
+        .stdout(contains("1: pub fn add(lhs: i32, rhs: i32) -> i32"))
         .stdout(contains("lhs + rhs").not());
+}
+
+#[test]
+fn cli_lines_format_is_default_with_numbers_and_path_header() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    fs::write(
+        tmp.path().join("sample.rs"),
+        "pub fn add(lhs: i32, rhs: i32) -> i32 {\n    lhs + rhs\n}\n",
+    )
+    .expect("write");
+
+    Command::cargo_bin("contasty")
+        .expect("binary")
+        .arg(tmp.path())
+        .assert()
+        .success()
+        .stdout(contains("sample.rs\n"))
+        .stdout(contains("1: pub fn add(lhs: i32, rhs: i32) -> i32"))
+        .stdout(contains("…"))
+        .stdout(contains("lhs + rhs").not())
+        .stdout(contains("```").not());
 }
 
 #[test]

@@ -23,8 +23,7 @@ literal path errors. Default path is `.`.
 | `--strip=<CATS>`| Categories to strip. Comma-separated, repeatable, interleaved with paths. |
 | `--ignore=<MODE>`| `.gitignore` filtering: `enable` (default), `disable`, `reverse`. Repeatable, interleaved. |
 | `--stats`       | Print compaction statistics instead of the stripped code.         |
-| `--format=<FMT>`| `markdown` (default) or `json`.                                   |
-| `--no-reformat` | Disable all post-strip reformatting (built-in and configured).    |
+| `--format=<FMT>`| `lines` (default), `markdown`, or `json`.                         |
 | `--config=<PATH>`| Use a specific `contasty.toml` (default: `./contasty.toml`).     |
 | `-h, --help`    | Print help.                                                       |
 | `-V, --version` | Print version.                                                    |
@@ -75,7 +74,21 @@ contasty A --ignore=disable B --ignore=enable C      # per-path switching
 
 ## Output formats
 
-Markdown (default): one document, a fenced code block per file under a heading.
+Lines (default): per file, a bare relative-path header, then each surviving line
+as `N: <line>` at its original number. Elided bodies drop out, leaving a gap in
+the numbering — a signature at line 42 whose next symbol is line 60 has its body
+at lines 43–59, which you can read straight back from the file. Blank lines are
+omitted; files are separated by a blank line.
+
+```
+src/checkout.rs
+12: pub fn checkout(cart: &Cart, user: &User) -> Result<Receipt> …
+42: pub fn refund(order: &Order) -> Result<()> …
+```
+
+Markdown (`--format=markdown`): one document, a fenced code block per file under
+a heading, elided bodies shown as `{}` — reparseable, for pasting to a human or
+another chat.
 
 JSON (`--format=json`): pretty-printed bundle shaped as
 
@@ -139,9 +152,6 @@ It also tunes compaction thresholds (e.g. how long a string must be to elide),
 registers dynamic tree-sitter grammars for languages ast-grep does not bundle,
 and extends or overrides per-language strip rules. CLI `--strip` overrides the
 config strip set for all languages.
-
-Optional cosmetic post-strip reformatting is configured with a `reformat` key
-(embedded Topiary or a shell-out); disable it ad hoc with `--no-reformat`.
 
 ## Built-in languages
 

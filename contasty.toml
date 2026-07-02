@@ -35,15 +35,6 @@
 # [languages.php]
 # override = "rules/php-custom.yml"   # replace the embedded php.yml
 
-# Reformatter — tidy a language's stripped output (cosmetic, off by default;
-# failures fall back to the raw splice). See docs/reformatting.md.
-#
-# [languages.rust]
-# reformat = "topiary"                            # embedded (needs --features topiary)
-#
-# [languages.typescript]
-# reformat = { command = ["prettier", "--parser", "typescript"] }   # shell-out (stdin->stdout)
-
 [compact]
 # Minimum byte-length of a value expression that qualifies for elision.
 # Small definitions (like `pub const MAX: usize = 42;`) are kept intact

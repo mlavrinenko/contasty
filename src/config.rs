@@ -208,25 +208,6 @@ pub struct LangConfig {
     /// Replace the language's rules with this file outright.
     #[serde(default, rename = "override")]
     pub r#override: Option<PathBuf>,
-    /// Post-strip reformatter backend.
-    #[serde(default)]
-    pub reformat: Option<Reformat>,
-}
-
-/// Post-strip reformatter selection.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
-pub enum Reformat {
-    Mode(ReformatMode),
-    Command { command: Vec<String> },
-}
-
-/// The bare-string reformatter backends.
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum ReformatMode {
-    None,
-    Topiary,
 }
 
 impl LangConfig {
@@ -302,9 +283,6 @@ pub struct Config {
     /// Directory the config file lives in.
     #[serde(skip)]
     pub base: PathBuf,
-    /// Runtime kill-switch for reformatting.
-    #[serde(skip)]
-    pub no_reformat: bool,
 }
 
 impl Config {

@@ -16,12 +16,15 @@ use crate::lang::Registry;
 pub struct Stripped {
     /// Path to the source file (as the resolver reported it).
     pub path: PathBuf,
-    /// Markdown fence info-string for this file's language (e.g. `"rust"`).
+    /// Language display name, also the Markdown fence info-string (e.g. `"rust"`).
     pub lang_name: &'static str,
     /// Original source text before stripping.
     pub original: String,
-    /// Stripped source text — declarations kept, bodies replaced with `ELISION`.
+    /// Skeleton view: declarations kept, elided bodies replaced with `{}`.
+    /// Feeds the `markdown` / `json` formats and `--stats`.
     pub content: String,
+    /// Line-numbered view (`N: <line>`): the default `lines` format's body.
+    pub numbered: String,
 }
 
 /// Strip every supported file in `files` (a resolved, deduped set from
@@ -60,7 +63,7 @@ fn strip_one(
     };
     let drops = config.resolve_drops(language.name, strip);
     let source = fs::read_to_string(path)?;
-    let content = language.strip(
+    let views = language.strip_views(
         &source,
         path,
         drops.drop_tests,
@@ -73,7 +76,8 @@ fn strip_one(
         path: path.to_path_buf(),
         lang_name: language.name,
         original: source,
-        content,
+        content: views.skeleton,
+        numbered: views.numbered,
     }))
 }
 

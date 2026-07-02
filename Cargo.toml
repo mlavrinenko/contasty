@@ -3,7 +3,7 @@ members = [] # Add sub-crate paths here as the project grows
 
 [package]
 name = "contasty"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Strips all executable lines from your code to prepare tasty context for your agent."
@@ -21,35 +21,11 @@ path = "src/lib.rs"
 name = "contasty"
 path = "src/main.rs"
 
-[features]
-# Embedded Topiary reformatter backend. Off by default: Topiary pulls a
-# tree-sitter grammar stack separate from ast-grep's, so the default binary
-# stays lean. Shell-out reformatting needs no feature.
-default = []
-topiary = [
-  "dep:topiary-core",
-  "dep:topiary-queries",
-  "dep:topiary-tree-sitter-facade",
-  "dep:tree-sitter-rust",
-]
-
 [dependencies]
 thiserror = "2"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
-log = "0.4"
 env_logger = "0.11"
-# Embedded Topiary backend (feature `topiary`). VERSION CONSTRAINT: topiary-core
-# and ast-grep-core both link the native `tree-sitter` library, and cargo allows
-# only one version of a `links` crate in the graph. topiary-core 0.7.3 tracks
-# tree-sitter ^0.26, matching ast-grep-core 0.43's tree-sitter 0.26.x. When you
-# bump ast-grep-* below, re-check its tree-sitter minor and pin a topiary-core
-# that uses the same one, or the `topiary` feature stops resolving. See
-# docs/reformatting.md ("Maintenance").
-topiary-core = { version = "0.7.3", optional = true }
-topiary-queries = { version = "0.7.3", optional = true, features = ["rust"] }
-topiary-tree-sitter-facade = { version = "0.7.3", optional = true }
-tree-sitter-rust = { version = "0.24", optional = true }
 ast-grep-core = "0.43"
 ast-grep-config = "0.43"
 ast-grep-language = "0.43"

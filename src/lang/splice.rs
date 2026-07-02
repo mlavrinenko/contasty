@@ -79,6 +79,23 @@ fn consume_trailing_newline(source: &str, end: usize) -> usize {
     }
 }
 
+/// Effective, non-overlapping ranges `splice` would apply, in source order.
+/// Mirrors the skip-on-overlap rule so the line-numbered renderer agrees with
+/// the skeleton on exactly what is stripped.
+pub(super) fn resolve(ranges: &[(usize, usize, Action)]) -> Vec<(usize, usize, Action)> {
+    let sorted = sort_ranges(ranges);
+    let mut out = Vec::with_capacity(sorted.len());
+    let mut cursor = 0_usize;
+    for entry in sorted {
+        if entry.0 < cursor {
+            continue;
+        }
+        cursor = entry.1;
+        out.push(entry);
+    }
+    out
+}
+
 fn sort_ranges(ranges: &[(usize, usize, Action)]) -> Vec<(usize, usize, Action)> {
     let mut sorted: Vec<_> = ranges.to_vec();
     // Sort by start ascending, then by end descending so a wider range that

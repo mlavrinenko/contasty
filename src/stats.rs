@@ -156,6 +156,7 @@ mod tests {
             lang_name: "rust",
             original: src.to_owned(),
             content: compacted.to_owned(),
+            numbered: String::new(),
         }];
 
         let report = compute(&items);
@@ -182,6 +183,7 @@ mod tests {
             lang_name: "rust",
             original: src.to_owned(),
             content: compacted.to_owned(),
+            numbered: String::new(),
         }];
 
         let report = compute(&items);
@@ -234,6 +236,7 @@ mod tests {
             lang_name: "rust",
             original: src.to_owned(),
             content: compacted.to_owned(),
+            numbered: String::new(),
         }];
 
         let report = compute(&items);
