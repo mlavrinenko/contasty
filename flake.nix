@@ -1,18 +1,7 @@
 {
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
-    ejectest = {
-      url = "github:mlavrinenko/ejectest";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    linecop = {
-      url = "github:mlavrinenko/linecop";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    outdatty = {
-      url = "github:mlavrinenko/outdatty";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    qahq.url = "github:mlavrinenko/qahq";
     naersk = {
       url = "github:nix-community/naersk";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -22,10 +11,8 @@
 
   outputs =
     {
-      ejectest,
+      qahq,
       flake-utils,
-      linecop,
-      outdatty,
       naersk,
       nixpkgs,
       ...
@@ -49,9 +36,9 @@
         # For `nix develop`:
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = [
-            ejectest.packages.${system}.default
-            linecop.packages.${system}.default
-            outdatty.packages.${system}.default
+            qahq.packages.${system}.ejectest
+            qahq.packages.${system}.linecop
+            qahq.packages.${system}.outdatty
           ] ++ (with pkgs; [
             rustc
             cargo

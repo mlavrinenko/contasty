@@ -22,7 +22,7 @@ groups:
   dev-docs:
     source:
       Justfile: 58409a78a1c000e164bf9df8ed8c32e4a58e65536e6cc6f5e79a3cc12e989fb7
-      flake.nix: 2974bcdadbb6ce2222776449e821db57a09541aeff3955946d52ae36244ddb28
+      flake.nix: 8e2ed970f23cd25a2cd0a9131c795759255820536a00438d2b52082d32092277
     dependents:
       CONTRIBUTING.md: 77f87aa6915721ca2e2469ca21ad536cc56b53e3802dee2bd72c43ed7ef3787a
   language-docs:
