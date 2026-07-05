@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-05
+
+### Changed
+
+- Configuration moves to a namespaced `.contasty/` project directory:
+  `contasty.toml` is now `.contasty/config.toml` (`git mv contasty.toml
+  .contasty/config.toml` for existing projects — no fallback to the old
+  path). Layered under a matching XDG global config
+  (`$XDG_CONFIG_HOME/contasty/config.toml`, or
+  `$HOME/.config/contasty/config.toml`), project winning on a shared key:
+  `[compact]` replaces wholesale, `[strip]` is `project.or(global)`, and
+  `[languages.<lang>]` entries union by key with the project entry winning
+  wholesale on a shared key. A language or dynamic grammar registered once in
+  the global config is available in every project. `--config` overrides only
+  the project layer's path; the global layer is unaffected.
+- Every `[languages.<lang>]` path (`rules`, `extend`, `override`,
+  `libraryPath`, including its per-target-triple map) resolves to an absolute
+  path against its own defining config file's directory at load time, so a
+  grammar or rule file declared in the global config resolves correctly
+  regardless of which project is being scanned.
+- Query file (`*.cty.yaml`) `rules` patterns now root at the scanned
+  project's working directory, not the query file's own directory, so a
+  saved query under `.contasty/queries/` or the XDG global queries dir
+  selects the project it is run against rather than files beside itself. An
+  external `{ path }` rules file is still located relative to the query
+  file's directory, but the patterns it contains root at the working
+  directory too. The path-escape sandbox on external rule files and `import`
+  targets is lifted — those are trusted, config-referenced machinery, and the
+  walker root already guarantees every *selected* file stays under the
+  working directory. `import` targets still resolve relative to the
+  importing query's directory.
+- `--config` flag help text now points at `.contasty/config.toml`.
+
+### Added
+
+- Saved queries: an argument of the form `@name` resolves to
+  `<project>/.contasty/queries/<name>.cty.yaml` (then `.cty.yml`), else
+  `<global>/queries/<name>.cty.yaml` (then `.yml`); first hit wins. Not found
+  is an error listing every path searched. The resolved file unfolds exactly
+  like a query file passed by path.
+
 ## [0.2.0] - 2026-07-02
 
 ### Changed
@@ -128,6 +169,7 @@ First public release.
   `yaml-language-server` modeline; editor wiring is documented for Zed.
 - Markdown renderer with relative paths in per-file headers.
 
-[Unreleased]: https://github.com/mlavrinenko/contasty/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/mlavrinenko/contasty/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/mlavrinenko/contasty/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mlavrinenko/contasty/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mlavrinenko/contasty/releases/tag/v0.1.0

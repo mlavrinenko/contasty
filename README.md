@@ -37,8 +37,8 @@ JavaScript, Python, Go, Java, C#, Ruby, C++, C, Kotlin, Swift, Scala, Bash, Lua,
 Dart, Elixir, Haskell, Nix, Solidity, JSON, YAML, HTML, CSS, and HCL — every
 grammar ast-grep bundles except Markdown (prose, nothing to strip). You can
 add a language with a dynamic tree-sitter grammar, and extend or override any
-language's rules from `contasty.toml` — both
-without rebuilding contasty.
+language's rules from `.contasty/config.toml` — both without rebuilding
+contasty.
 
 ## Install
 
@@ -63,6 +63,7 @@ contasty src/lib.rs src/main.rs        # several files at once
 contasty 'src/**/*.rs'                 # glob (quote it; expanded internally)
 contasty 'crates/*/src'                # glob to dirs; each subtree is walked
 contasty                               # default path is "."
+contasty @api                          # saved query: .contasty/queries/api.cty.yaml
 contasty --strip=comments,imports src/  # strip comments and imports
 contasty --strip=tests src/             # also strip test functions
 contasty --strip=all src/               # strip everything (alias: everything)
@@ -73,7 +74,7 @@ contasty src/                          # default: line-numbered lines format
 contasty --format=markdown src/        # reparseable Markdown document
 contasty --format=json src/            # emit a JSON bundle instead
 contasty --stats src/                  # print compactization statistics
-contasty --config path.toml src/       # use a specific contasty.toml
+contasty --config path.toml src/       # use a specific config file (project layer)
 contasty --ignore=disable src/         # include .gitignored files too
 contasty --ignore=reverse src/         # only .gitignored files
 contasty A --ignore=disable B --ignore=enable C  # per-path mode switching
@@ -133,7 +134,7 @@ is stronger at different things.
 | -------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Languages with body elision            | [18 of 27 built-ins](docs/languages.md)                                 | [16, incl. Vue](https://github.com/yamadashy/repomix/tree/main/src/core/treeSitter/queries) |
 | Add a language without a rebuild       | [yes — dynamic grammar + rules](docs/languages.md)                      | no                                                                                          |
-| Extend / override strip rules          | [yes — contasty.toml](docs/custom-rules.md)                             | no (fixed queries)                                                                          |
+| Extend / override strip rules          | [yes — .contasty/config.toml](docs/custom-rules.md)                     | no (fixed queries)                                                                          |
 | Gate comments (keep / drop)            | [yes — per-language toggle](src/lang/rules/python.yml)                  | [yes — removeComments](https://repomix.com/guide/comment-removal)                           |
 | Gate imports (keep / drop)             | [yes — --strip=imports](src/lang/rules/python.yml)                      | no (imports kept)                                                                           |
 | Gate tests (keep / drop)               | [yes — --strip=tests](src/lang/rules/python.yml)                        | no                                                                                          |
@@ -153,10 +154,14 @@ approach: an index the agent queries live, not a static document.
 
 ## Configuration
 
-Drop a `contasty.toml` in your project root to tune compaction thresholds,
-set default category inclusion, register dynamic grammars, and extend or
-override per-language rules. All fields are optional. See
-[docs/languages.md](docs/languages.md) and [docs/custom-rules.md](docs/custom-rules.md).
+Drop a `.contasty/config.toml` in your project root to tune compaction
+thresholds, set default category inclusion, register dynamic grammars, and
+extend or override per-language rules. All fields are optional. Layered under
+a matching XDG global config (`$XDG_CONFIG_HOME/contasty/config.toml`, or
+`$HOME/.config/contasty/config.toml`), project winning on a shared key — so a
+grammar or rule file registered once in the global config works in every
+project. See [docs/languages.md](docs/languages.md) and
+[docs/custom-rules.md](docs/custom-rules.md).
 
 Category stripping can be set cross-language under `[strip]` and refined
 per language under `[languages.<lang>]`:
@@ -169,6 +174,10 @@ strip = ["comments", "body"]              # keep imports for Rust only
 ```
 
 CLI `--strip` overrides config for all languages. Config loads first; CLI wins.
+
+Reusable selections can be saved as query files under
+`.contasty/queries/<name>.cty.yaml` (or the XDG global queries dir) and
+invoked by name: `contasty @name`. See [docs/queries.md](docs/queries.md).
 
 ## Agent skill
 
@@ -190,7 +199,8 @@ so a language is data, not code.
   logic in Rust.
 - Dynamic grammar: for a language ast-grep does not bundle, supply a compiled
   native tree-sitter grammar (`.so`) plus a rule file and register it under
-  `[languages.<lang>]` with a `libraryPath` in `contasty.toml` — no rebuild.
+  `[languages.<lang>]` with a `libraryPath` in `.contasty/config.toml` — no
+  rebuild.
 - Extend / override: point an existing language at a user rule file with the
   `extend` / `override` key of its `[languages.<lang>]` entry to append to
   (`extend`) or replace (`override`) its embedded rules.

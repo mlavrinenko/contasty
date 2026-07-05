@@ -6,7 +6,7 @@ use super::*;
 #[test]
 fn config_defaults_when_file_missing() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let config = Config::load(None, dir.path());
+    let config = Config::load(None, dir.path(), None);
     assert_eq!(config.compact.elide_min_bytes, 0);
 }
 
@@ -16,7 +16,7 @@ fn config_loads_from_file() {
     let path = dir.path().join("contasty.toml");
     let mut f = std::fs::File::create(&path).expect("create");
     writeln!(f, "[compact]\nelide_min_bytes = 256").expect("write");
-    let config = Config::load(Some(&path), dir.path());
+    let config = Config::load(Some(&path), dir.path(), None);
     assert_eq!(config.compact.elide_min_bytes, 256);
 }
 
@@ -25,7 +25,7 @@ fn config_defaults_when_invalid() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("contasty.toml");
     std::fs::write(&path, "not valid toml {{{").expect("write");
-    let config = Config::load(Some(&path), dir.path());
+    let config = Config::load(Some(&path), dir.path(), None);
     assert_eq!(config.compact.elide_min_bytes, default_min_bytes());
 }
 
@@ -44,7 +44,7 @@ fn strip_cross_language_defaults_apply_to_all_langs() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("contasty.toml");
     std::fs::write(&path, "strip = [\"tests\"]\n").expect("write");
-    let config = Config::load(Some(&path), dir.path());
+    let config = Config::load(Some(&path), dir.path(), None);
     assert!(config.resolve_config_strip("rust").drop_tests());
     assert!(config.resolve_config_strip("php").drop_tests());
 }
@@ -60,7 +60,7 @@ fn strip_per_language_overrides_cross_language() {
          strip = [\"tests\"]\n",
     )
     .expect("write");
-    let config = Config::load(Some(&path), dir.path());
+    let config = Config::load(Some(&path), dir.path(), None);
     let rust = config.resolve_config_strip("rust");
     assert!(!rust.drop_comments(), "rust: comments kept (per-lang wins)");
     assert!(rust.drop_tests(), "rust: tests stripped");
@@ -74,7 +74,7 @@ fn unknown_language_falls_back_to_cross_language() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("contasty.toml");
     std::fs::write(&path, "strip = [\"imports\"]\n").expect("write");
-    let config = Config::load(Some(&path), dir.path());
+    let config = Config::load(Some(&path), dir.path(), None);
     assert!(config.resolve_config_strip("javascript").drop_imports());
 }
 
@@ -83,7 +83,7 @@ fn cli_override_beats_per_language_config() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("contasty.toml");
     std::fs::write(&path, "[languages.rust]\nstrip = []\n").expect("write");
-    let config = Config::load(Some(&path), dir.path());
+    let config = Config::load(Some(&path), dir.path(), None);
     let config_strip = config.resolve_config_strip("rust");
     assert_eq!(config_strip, StripSet::empty(), "config says strip nothing");
     let cli = StripSet::empty().insert(StripSet::COMMENTS);
@@ -96,7 +96,7 @@ fn cli_override_is_global() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("contasty.toml");
     std::fs::write(&path, "[languages.php]\nstrip = []\n").expect("write");
-    let config = Config::load(Some(&path), dir.path());
+    let config = Config::load(Some(&path), dir.path(), None);
     let cli = StripSet::empty().insert(StripSet::IMPORTS);
     let php_drops = config.resolve_drops("php", FileStrip::new(Some(cli), StripSet::empty()));
     assert!(php_drops.drop_imports, "CLI beats per-lang empty");
@@ -109,7 +109,7 @@ fn no_cli_strip_falls_through_to_config_layering() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("contasty.toml");
     std::fs::write(&path, "strip = [\"comments\"]\n").expect("write");
-    let config = Config::load(Some(&path), dir.path());
+    let config = Config::load(Some(&path), dir.path(), None);
     // cli == None: the config-layered default for the language is the base.
     let drops = config.resolve_drops("rust", FileStrip::new(None, StripSet::empty()));
     assert!(

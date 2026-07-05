@@ -416,8 +416,9 @@ impl Registry {
     /// grammar, then apply the per-language rule overrides. Registers the dynamic
     /// grammars (`[languages.<lang>]` entries with a `libraryPath`, once),
     /// compiles each one's rule file, and extends/replaces any language whose
-    /// entry sets `extend` / `override`. Paths resolve against the config file's
-    /// dir.
+    /// entry sets `extend` / `override`. Every path is already absolute — resolved
+    /// by [`crate::config::Config::load`] against its own defining config file's
+    /// directory (project or global) — so no shared base is needed here.
     ///
     /// # Errors
     ///
@@ -429,17 +430,15 @@ impl Registry {
     /// or references kinds the grammar lacks.
     pub fn with_config(config: &Config) -> Result<Self, AppError> {
         let mut registry = Self::new()?;
-        let base = config.base.as_path();
-        dynamic::register(base, &config.languages)?;
+        dynamic::register(&config.languages)?;
         for (name, cfg) in &config.languages {
             if !cfg.is_dynamic() {
                 continue;
             }
-            let rules = cfg.rules.as_ref().ok_or_else(|| {
+            let path = cfg.rules.as_ref().ok_or_else(|| {
                 AppError::CustomLang(format!("languages.{name}: custom grammar needs `rules`"))
             })?;
-            let path = base.join(rules);
-            let yaml = std::fs::read_to_string(&path).map_err(|err| {
+            let yaml = std::fs::read_to_string(path).map_err(|err| {
                 AppError::CustomLang(format!("{name}: rules `{}`: {err}", path.display()))
             })?;
             // The grammar outlives the process (the dynamic registry never
@@ -448,7 +447,7 @@ impl Registry {
             let leaked: &'static str = Box::leak(name.clone().into_boxed_str());
             registry.langs.push(Language::from_rules(leaked, &yaml)?);
         }
-        registry.apply_overrides(&config.languages, base)?;
+        registry.apply_overrides(&config.languages)?;
         Ok(registry)
     }
 

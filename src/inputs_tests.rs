@@ -29,7 +29,7 @@ fn resolve_unions_and_dedups_file_and_folder() {
     let one = write(tmp.path(), "a.rs", "fn a() {}\n");
     write(tmp.path(), "b.rs", "fn b() {}\n");
     let args = [enable(tmp.path().to_path_buf()), enable(one)];
-    let files = resolve(&args, tmp.path()).expect("resolve");
+    let files = resolve(&args, tmp.path(), None).expect("resolve");
     assert_eq!(files.len(), 2, "{files:?}");
 }
 
@@ -38,7 +38,7 @@ fn resolve_missing_path_errors() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let missing = tmp.path().join("nope.rs");
     let args = [enable(missing)];
-    let err = resolve(&args, tmp.path()).expect_err("missing must error");
+    let err = resolve(&args, tmp.path(), None).expect_err("missing must error");
     assert!(matches!(err, AppError::Input(_)), "{err:?}");
 }
 
@@ -49,7 +49,7 @@ fn resolve_glob_matches_files_only() {
     write(tmp.path(), "b.rs", "fn b() {}\n");
     write(tmp.path(), "c.txt", "text\n");
     let args = [enable(tmp.path().join("*.rs"))];
-    let files = resolve(&args, tmp.path()).expect("resolve");
+    let files = resolve(&args, tmp.path(), None).expect("resolve");
     assert_eq!(files.len(), 2, "{files:?}");
     let paths = paths_only(&files);
     assert!(
@@ -66,7 +66,7 @@ fn resolve_glob_walks_matched_directory_subtree() {
     write(tmp.path(), "crates/y/src/lib.rs", "fn y() {}\n");
     write(tmp.path(), "crates/x/readme.md", "doc\n");
     let args = [enable(tmp.path().join("crates/*/src"))];
-    let files = resolve(&args, tmp.path()).expect("resolve");
+    let files = resolve(&args, tmp.path(), None).expect("resolve");
     assert_eq!(files.len(), 2, "{files:?}");
     let paths = paths_only(&files);
     assert!(paths.iter().all(|path| path.ends_with("src/lib.rs")));
@@ -79,7 +79,7 @@ fn resolve_unfolds_query_file_in_folder() {
     write(tmp.path(), "lib/b.rs", "fn b() {}\n");
     write(tmp.path(), "api.cty.yaml", "rules: |\n  src\n");
     let args = [enable(tmp.path().to_path_buf())];
-    let files = resolve(&args, tmp.path()).expect("resolve");
+    let files = resolve(&args, tmp.path(), None).expect("resolve");
     assert_eq!(
         files.len(),
         2,
@@ -100,7 +100,7 @@ fn resolve_unfolds_query_file_as_direct_arg() {
     write(tmp.path(), "lib/b.rs", "fn b() {}\n");
     let query = write(tmp.path(), "api.cty.yaml", "rules: |\n  src\n");
     let args = [enable(query)];
-    let files = resolve(&args, tmp.path()).expect("resolve");
+    let files = resolve(&args, tmp.path(), None).expect("resolve");
     assert_eq!(files.len(), 1, "{files:?}");
 }
 
@@ -109,7 +109,7 @@ fn resolve_glob_zero_match_is_not_an_error() {
     let tmp = tempfile::tempdir().expect("tempdir");
     write(tmp.path(), "a.txt", "text\n");
     let args = [enable(tmp.path().join("*.rs"))];
-    let files = resolve(&args, tmp.path()).expect("zero match warns");
+    let files = resolve(&args, tmp.path(), None).expect("zero match warns");
     assert!(files.is_empty(), "{files:?}");
 }
 
@@ -135,7 +135,7 @@ fn resolve_enable_respects_gitignore() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let (_kept, _ignored) = setup_gitignore_tree(tmp.path());
     let args = [enable(tmp.path().to_path_buf())];
-    let files = resolve(&args, tmp.path()).expect("resolve");
+    let files = resolve(&args, tmp.path(), None).expect("resolve");
     assert_eq!(files.len(), 1, "{files:?}");
     let paths = paths_only(&files);
     assert!(
@@ -152,7 +152,7 @@ fn resolve_disable_includes_ignored() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let (_kept, _ignored) = setup_gitignore_tree(tmp.path());
     let args = [with_mode(tmp.path().to_path_buf(), IgnoreMode::Disable)];
-    let files = resolve(&args, tmp.path()).expect("resolve");
+    let files = resolve(&args, tmp.path(), None).expect("resolve");
     assert!(files.len() >= 2, "both files present: {files:?}");
 }
 
@@ -161,7 +161,7 @@ fn resolve_reverse_only_ignored() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let (_kept, _ignored) = setup_gitignore_tree(tmp.path());
     let args = [with_mode(tmp.path().to_path_buf(), IgnoreMode::Reverse)];
-    let files = resolve(&args, tmp.path()).expect("resolve");
+    let files = resolve(&args, tmp.path(), None).expect("resolve");
     assert_eq!(files.len(), 1, "{files:?}");
     let paths = paths_only(&files);
     assert!(
@@ -181,7 +181,7 @@ fn resolve_mixed_modes_per_path() {
         enable(tmp.path().to_path_buf()),
         with_mode(tmp.path().to_path_buf(), IgnoreMode::Reverse),
     ];
-    let files = resolve(&args, tmp.path()).expect("resolve");
+    let files = resolve(&args, tmp.path(), None).expect("resolve");
     assert_eq!(
         files.len(),
         2,
@@ -199,8 +199,65 @@ fn resolve_last_group_wins_strip_for_dedup() {
         (file.clone(), IgnoreMode::Enable, Some(strip_a)),
         (file.clone(), IgnoreMode::Enable, Some(strip_b)),
     ];
-    let files = resolve(&args, tmp.path()).expect("resolve");
+    let files = resolve(&args, tmp.path(), None).expect("resolve");
     assert_eq!(files.len(), 1);
     let (_, got_strip) = files.first().expect("one");
     assert_eq!(got_strip.cli, Some(strip_b), "last group wins");
+}
+
+#[test]
+fn resolve_named_query_project_wins_over_global() {
+    let project = tempfile::tempdir().expect("tempdir");
+    let global = tempfile::tempdir().expect("tempdir");
+    write(project.path(), "src/a.rs", "fn a() {}\n");
+    write(
+        project.path(),
+        ".contasty/queries/api.cty.yaml",
+        "rules: |\n  src\n",
+    );
+    write(
+        global.path(),
+        "queries/api.cty.yaml",
+        "rules: |\n  nonexistent\n",
+    );
+    let args = [enable(PathBuf::from("@api"))];
+    let files = resolve(&args, project.path(), Some(global.path())).expect("resolve");
+    assert_eq!(files.len(), 1, "{files:?}");
+}
+
+#[test]
+fn resolve_named_query_falls_back_to_global() {
+    let project = tempfile::tempdir().expect("tempdir");
+    let global = tempfile::tempdir().expect("tempdir");
+    write(project.path(), "src/a.rs", "fn a() {}\n");
+    write(global.path(), "queries/api.cty.yaml", "rules: |\n  src\n");
+    let args = [enable(PathBuf::from("@api"))];
+    let files = resolve(&args, project.path(), Some(global.path())).expect("resolve");
+    assert_eq!(files.len(), 1, "{files:?}");
+}
+
+#[test]
+fn resolve_named_query_yml_extension_is_also_tried() {
+    let project = tempfile::tempdir().expect("tempdir");
+    write(project.path(), "src/a.rs", "fn a() {}\n");
+    write(
+        project.path(),
+        ".contasty/queries/api.cty.yml",
+        "rules: |\n  src\n",
+    );
+    let args = [enable(PathBuf::from("@api"))];
+    let files = resolve(&args, project.path(), None).expect("resolve");
+    assert_eq!(files.len(), 1, "{files:?}");
+}
+
+#[test]
+fn resolve_named_query_not_found_errors_listing_searched_paths() {
+    let project = tempfile::tempdir().expect("tempdir");
+    let args = [enable(PathBuf::from("@missing"))];
+    let err = resolve(&args, project.path(), None).expect_err("missing saved query must error");
+    let AppError::Input(msg) = err else {
+        panic!("expected Input error: {err:?}")
+    };
+    assert!(msg.contains("@missing"), "{msg}");
+    assert!(msg.contains(".contasty/queries"), "{msg}");
 }

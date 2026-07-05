@@ -137,8 +137,11 @@ pass, then re-run with comments only on the narrower part where you need them.
   programmatic use. Default is the line-numbered `lines` format above.
 - `--ignore=disable` — include `.gitignore`d files too; `--ignore=reverse` —
   only ignored files. Default respects `.gitignore`.
-- `--config path.toml` — use a specific `contasty.toml` (thresholds, custom
-  rules, extra languages).
+- `--config path.toml` — use a specific config file for the project layer
+  (default: `.contasty/config.toml`; thresholds, custom rules, extra
+  languages). Always layered under the XDG global config.
+- `contasty @name` — run a saved query from `.contasty/queries/<name>.cty.yaml`
+  or the XDG global queries dir instead of retyping a path list.
 
 Full flag, query-file, and config reference: `references/cli.md`. Read it when a
 task needs interleaved per-path settings, query files, JSON output details, or

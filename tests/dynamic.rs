@@ -50,10 +50,11 @@ fn custom_grammar_strips_via_rule_file_no_rebuild() {
     let tmp = tempfile::tempdir().expect("tempdir");
     scaffold(tmp.path());
 
-    let config = Config::load(Some(&tmp.path().join("contasty.toml")), tmp.path());
+    let config = Config::load(Some(&tmp.path().join("contasty.toml")), tmp.path(), None);
     let files = contasty::resolve(
         &[(tmp.path().to_path_buf(), contasty::IgnoreMode::Enable, None)],
         tmp.path(),
+        None,
     )
     .expect("resolve");
     let items = contasty::collect(&files, &config).expect("collect");

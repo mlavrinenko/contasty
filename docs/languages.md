@@ -70,7 +70,8 @@ carry per-rule comments. Notes:
 The 28 grammars ast-grep bundles cover the common case with zero `.so`. For a
 language it does not ship, build a native tree-sitter grammar (one per OS/arch —
 native libraries are not portable), supply a rule file, and register both in
-`contasty.toml` — no rebuild of contasty:
+`.contasty/config.toml` (project) or the XDG global `config.toml` — no rebuild
+of contasty:
 
 ```sh
 tree-sitter build --output mylang.so   # run in the grammar repo
@@ -94,13 +95,15 @@ rules = "rules/mylang.yml"
 # Optional: languageSymbol (default tree_sitter_<name>), metaVarChar, expandoChar.
 ```
 
-Relative `libraryPath` / `rules` paths resolve against the config file's
-directory. The grammar registers once at startup and is never unloaded
-(libloading leaks the library on purpose), so every custom grammar must be
-declared in a single config. The rule file is identical to a built-in's. A
-missing library, wrong symbol, incompatible tree-sitter version, or a target
-absent from a `libraryPath` map fails with an actionable error, not a panic
-(only native libraries — ast-grep has no wasm path).
+Relative `libraryPath` / `rules` paths resolve against their own config file's
+directory (project's `.contasty/config.toml` or the XDG global `config.toml`)
+as soon as that layer loads, before the two layers merge — so a grammar
+registered once in the global config resolves correctly in every project, with
+no per-project adjustment. The grammar registers once at startup and is never
+unloaded (libloading leaks the library on purpose). The rule file is identical
+to a built-in's. A missing library, wrong symbol, incompatible tree-sitter
+version, or a target absent from a `libraryPath` map fails with an actionable
+error, not a panic (only native libraries — ast-grep has no wasm path).
 
 ## Overriding a language's rules
 

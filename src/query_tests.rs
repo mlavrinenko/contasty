@@ -254,14 +254,74 @@ fn query_rules_cycle_guard_holds() {
 }
 
 #[test]
-fn query_path_escape_errors() {
+fn query_missing_import_outside_cwd_still_errors_not_found() {
+    // The old path-escape sandbox is gone: external rule files and import
+    // targets (trusted, config-referenced machinery) may live outside cwd.
+    // A required import that simply doesn't exist there is still an error.
     let tmp = tempfile::tempdir().expect("tempdir");
-    let body = "import:\n  - ../../etc/something.cty.yaml\n";
+    let body = "import:\n  - ../../etc/does-not-exist.cty.yaml\n";
     let query = write(tmp.path(), "q.cty.yaml", body);
     let mut visited = BTreeSet::new();
     let err = resolve_query(&query, IgnoreMode::Enable, tmp.path(), &mut visited)
-        .expect_err("escape must error");
+        .expect_err("missing required import must error");
     assert!(matches!(err, AppError::Query(_)), "{err:?}");
+}
+
+#[test]
+fn query_rules_root_at_cwd_not_query_dir() {
+    // The query file lives in a subdirectory (as a saved query under
+    // `.contasty/queries/` would), but its `rules` pattern names a path
+    // relative to the project root (cwd), not its own directory.
+    let tmp = tempfile::tempdir().expect("tempdir");
+    write(tmp.path(), "src/a.rs", "fn a() {}\n");
+    let query = write(
+        tmp.path(),
+        ".contasty/queries/api.cty.yaml",
+        "rules: |\n  src\n",
+    );
+    let mut visited = BTreeSet::new();
+    let (files, _strip) =
+        resolve_query(&query, IgnoreMode::Enable, tmp.path(), &mut visited).expect("resolve");
+    assert_eq!(files.len(), 1, "{files:?}");
+    assert!(
+        files
+            .first()
+            .expect("one")
+            .to_str()
+            .is_some_and(|text| text.ends_with("a.rs"))
+    );
+}
+
+#[test]
+fn query_external_rules_file_outside_cwd_is_allowed() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let project = tmp.path().join("project");
+    fs::create_dir_all(&project).expect("mkdir project");
+    write(&project, "src/a.rs", "fn a() {}\n");
+    // External rule file lives outside cwd (sibling to the project dir, like
+    // a rule file kept alongside `.contasty/`).
+    write(tmp.path(), "shared/rules.ignore", "src\n");
+    let body = "rules:\n  path: ../shared/rules.ignore\n";
+    let query = write(&project, "q.cty.yaml", body);
+    let mut visited = BTreeSet::new();
+    let (files, _strip) =
+        resolve_query(&query, IgnoreMode::Enable, &project, &mut visited).expect("resolve");
+    assert_eq!(files.len(), 1, "{files:?}");
+}
+
+#[test]
+fn query_import_outside_cwd_is_allowed() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let project = tmp.path().join("project");
+    fs::create_dir_all(&project).expect("mkdir project");
+    write(&project, "src/a.rs", "fn a() {}\n");
+    write(tmp.path(), "shared/common.cty.yaml", "rules: |\n  src\n");
+    let body = "import:\n  - ../shared/common.cty.yaml\n";
+    let query = write(&project, "q.cty.yaml", body);
+    let mut visited = BTreeSet::new();
+    let (files, _strip) =
+        resolve_query(&query, IgnoreMode::Enable, &project, &mut visited).expect("resolve");
+    assert_eq!(files.len(), 1, "{files:?}");
 }
 
 #[test]

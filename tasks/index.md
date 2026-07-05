@@ -36,3 +36,4 @@ history once cleaned up.
 - [x] [13 — Selection vocabulary: `--strip=<categories>` + query `strip:`](13-strip-vocabulary.md)
 - [x] [14 — End-user agent skill](14-end-user-skill.md)
 - [x] [15 — Agent-native `lines` output + drop reformatting](15-lines-format.md)
+- [x] [16 — `.contasty/` project dir + XDG global config & queries](16-contasty-dir.md)

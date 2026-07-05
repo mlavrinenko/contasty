@@ -1,6 +1,7 @@
-# contasty configuration — drop this in your project root.
-#
-# All fields are optional; defaults are shown below.
+# contasty project configuration — .contasty/config.toml in your project root.
+# Layered over the XDG global config ($XDG_CONFIG_HOME/contasty/config.toml,
+# or $HOME/.config/contasty/config.toml when unset); this layer wins on a
+# shared key. All fields are optional; defaults are shown below.
 
 # Strip categories: what to strip from the output.
 # Built-in defaults: comments, imports, and body stripped; tests kept.

@@ -6,19 +6,20 @@ groups:
       src/lang/lines.rs: 34200581058e3be1945beaab2595a182f0da746a4e7dd54ba4a8b6e346605f30
       src/lang/splice.rs: b772267010231958bad157dab0f2bc73670c729bfb428e9eb9b0f1acca72747f
       src/lib.rs: 380da25bfcb01cb741ffbd20b515097a4a521fbe0bfb9a644becd83f8df63604
-      src/main.rs: 466041e10df96bd86d3fa7bcef51706a9fdeba3440dfb55c33215b2f41033bcd
+      src/main.rs: 2ed2f144adc481e7b9e49a5133ab73e78c182b0044ed889e770740e3ae116318
       src/render.rs: e27c91a591a09d11556b04294197ec30a2fc95d02be60626bc1c1ba25fab3012
     dependents:
-      README.md: a4e54e32d39a1ed9e967b188780af08c73aa6e8934138373ffe8f902a8c0a81a
-      skills/contasty/SKILL.md: 087881fb6d264b38fe9e9861b5f66011f15f422958bf2c79f02568db603af9bd
-      skills/contasty/references/cli.md: 90f38258f99bd4887d4a5446530fc6a82f72ca19b6e0e16be4ad6ff67272148b
-      www/index.html: 10fa5de3bdae172262270b5e93a45073135b14047c0efff6d546366031a0a8cd
+      README.md: 630b8abc735f0b330323717857a8bb317fdf288447f4e179d548f0c719550ff3
+      skills/contasty/SKILL.md: 6970b5866c8b1fa0b41a237e54967c9e66e48fd1be69376c9b01eef59925e699
+      skills/contasty/references/cli.md: ffeb9169efab60595b6de836abd1d1dc1c50d9d10dcd374276a4ee5e8d3007ca
+      www/index.html: c3131ccc6ec198d5d586dfc1abc05cf64bef6deee9b75d2034aa48271193a1cd
   custom-rules-docs:
     source:
-      src/config.rs: af94f25c99f20c1b34eb3ca778c11752196dc83286e9dc061e800472e8e50d05
-      src/lang/overrides.rs: 439da832c7bda3cbfec0d83e42d00f19be867c1f6b0c292cd989b0d2c551bf93
+      src/config/load.rs: 5ecea3e9a149f3631c10de1fc66a048beee64749dbfab15fc2363871cff29611
+      src/config/mod.rs: edf463ac149ace127bf184d94f4b8c1eb23155349433af498c0a9fb227b1f036
+      src/lang/overrides.rs: 15657b0414b9f7ef2f54f80c5c88ce61d722a24d2be5889d9ad66c02241c4c9b
     dependents:
-      docs/custom-rules.md: fb73d6d8bd7a8942b0f09e5f5eb31bf16a5a709d2a339f26435b0a804d5a4b8f
+      docs/custom-rules.md: 82c3d343b9bb682f2b9cbd512a050b64221e10218112d66c97a14c0c29607782
   dev-docs:
     source:
       Justfile: 58409a78a1c000e164bf9df8ed8c32e4a58e65536e6cc6f5e79a3cc12e989fb7
@@ -27,17 +28,17 @@ groups:
       CONTRIBUTING.md: 77f87aa6915721ca2e2469ca21ad536cc56b53e3802dee2bd72c43ed7ef3787a
   language-docs:
     source:
-      src/lang/mod.rs: 00c49bc856a67bcc9fb09814dc293f2617a1b1360ac5916eb8cbbc530388e22f
+      src/lang/mod.rs: adcfb7dd62ab3abb035d27fdb9eb38a364c1abbedd073f75d98241a80af5f0ef
     dependents:
-      docs/languages.md: 259d39b84f4c3763b51c2fb3b84d97313ca10275c520af0a542f60d4e51e6a72
+      docs/languages.md: 63a1333bf3c305243b6793dfde198fff143696d69e070f6f8d23328b5a56713f
   query-docs:
     source:
-      src/inputs.rs: 71a06d49a68b3b0c27317dbd517a8362c8462092deac4c5ae2f4dec156030bac
-      src/query.rs: 1aa4d1f4de2d85facb528bdb7e64d1c2348d0665de4cccfc1340a85ad40e1e68
+      src/inputs.rs: f530b2c49eb09f5afa1d05395146290ddb1635efea12ee555ee706a1d3da824a
+      src/query.rs: 812e565ab0dd79be89a04e3757c8f0a6dfa0b46d1920acde541b383de50f7f48
     dependents:
-      docs/queries.md: 6c26add6e51e1bb4a9229964caf663e20bcce596ba189397485c75fef135be9e
+      docs/queries.md: 747d588ce71c3d807904829f0b9a17bbedf3b50dd243ccd4a3d5313d42ac0b93
   release-notes:
     source:
-      Cargo.toml: f63038fa68304412de6614a7f25b9b9c9017dccb272d00b031b1b1f105c85d9f
+      Cargo.toml: ece6da9d7ad5ea30f4e227fcd8bc08c7b5239f2cbaf390f4b150203bd5352c57
     dependents:
-      CHANGELOG.md: 0a295614e80f16e04275230c72df10fa37140458b0f709a649b1fdaf2a213e79
+      CHANGELOG.md: 85e181e529e646104d136f4ae14b959aa7bdf9bbb696e6d234713bd64ff6ccf3

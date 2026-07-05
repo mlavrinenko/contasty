@@ -1,9 +1,18 @@
+//! Configuration types plus the resolved, in-memory `Config`.
+//!
+//! A project's `.contasty/config.toml` is layered over the XDG global
+//! `<global>/config.toml` (project wins on a shared key); see [`load`] for the
+//! merge itself. Every [`LangConfig`] path field is resolved to an absolute
+//! path against its own config file's directory as part of that load, so
+//! nothing downstream needs to know which layer — or which directory —
+//! defined an entry.
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-const DEFAULT_CONFIG_NAME: &str = "contasty.toml";
+mod load;
 
 /// A strip-category: one kind of code contasty can strip.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -199,13 +208,15 @@ pub struct LangConfig {
     /// File extensions (no dot) a custom grammar claims.
     #[serde(default)]
     pub extensions: Vec<String>,
-    /// Path to the `rules/<lang>.yml` rule file.
+    /// Path to the `rules/<lang>.yml` rule file. Absolute once loaded via
+    /// [`Config::load`] — resolved against its defining config file's directory.
     #[serde(default)]
     pub rules: Option<PathBuf>,
-    /// Append this file's rules to the language's set.
+    /// Append this file's rules to the language's set. Absolute once loaded.
     #[serde(default)]
     pub extend: Option<PathBuf>,
-    /// Replace the language's rules with this file outright.
+    /// Replace the language's rules with this file outright. Absolute once
+    /// loaded.
     #[serde(default, rename = "override")]
     pub r#override: Option<PathBuf>,
 }
@@ -237,7 +248,8 @@ pub enum RuleSource<'a> {
     Override(&'a Path),
 }
 
-/// Where a custom grammar's shared library lives.
+/// Where a custom grammar's shared library lives. Path(s) absolute once
+/// loaded via [`Config::load`].
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 pub enum LibraryPath {
@@ -270,6 +282,8 @@ const fn default_max_string_bytes() -> usize {
     256
 }
 
+/// Fully resolved, two-layer-merged configuration. Built by [`Config::load`];
+/// every [`LangConfig`] path field it holds is already absolute.
 #[derive(Debug, Deserialize, Default)]
 pub struct Config {
     #[serde(default)]
@@ -280,9 +294,6 @@ pub struct Config {
     /// Per-language settings keyed by language name.
     #[serde(default)]
     pub languages: HashMap<String, LangConfig>,
-    /// Directory the config file lives in.
-    #[serde(skip)]
-    pub base: PathBuf,
 }
 
 impl Config {
@@ -323,23 +334,8 @@ impl Config {
             .and_then(|l| l.strip)
             .map_or(cross, |sc| sc.0)
     }
-
-    pub fn load(from_path: Option<&Path>, working_dir: &Path) -> Self {
-        let path = from_path.map_or_else(|| working_dir.join(DEFAULT_CONFIG_NAME), PathBuf::from);
-        let mut config = Self::load_file(&path).unwrap_or_default();
-        config.base = path
-            .parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-            .map_or_else(|| working_dir.to_path_buf(), Path::to_path_buf);
-        config
-    }
-
-    fn load_file(path: &Path) -> Option<Self> {
-        let content = std::fs::read_to_string(path).ok()?;
-        toml::from_str(&content).ok()
-    }
 }
 
 #[cfg(test)]
-#[path = "config_tests.rs"]
+#[path = "mod_tests.rs"]
 mod tests;

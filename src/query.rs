@@ -5,6 +5,17 @@
 //! `!` = exclude) and mapped onto `ignore::gitignore::Gitignore` with
 //! inverted semantics: gitignore "ignore" becomes "select", gitignore
 //! "unignore" becomes "deselect".
+//!
+//! `rules` patterns are always rooted at `cwd` (the scanned project's working
+//! directory), never at the query file's own directory — a saved query in
+//! `.contasty/queries/` or the XDG global dir describes the *project*, not
+//! its own location, so it selects correctly regardless of where it lives. An
+//! external `{ path }` rule file is located relative to the query file's
+//! directory (like an `import`), but the patterns it contains still root at
+//! `cwd`. Only external rule files and `import` targets — trusted,
+//! config-referenced machinery — may live outside `cwd`; the walker that
+//! selects source files always roots at `cwd`, so a selected file is
+//! guaranteed to live under it regardless of where the query/rule file does.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -72,8 +83,8 @@ const fn default_required() -> bool {
 ///
 /// # Errors
 ///
-/// Broken YAML, unknown field, missing required import, path escaping the
-/// CWD, or a pattern compilation failure.
+/// Broken YAML, unknown field, missing required import, or a pattern
+/// compilation failure.
 pub fn resolve_query(
     query_path: &Path,
     mode: IgnoreMode,
@@ -120,6 +131,9 @@ pub fn resolve_query(
 /// selected `*.cty.yaml` is itself a query file: it unfolds recursively (like
 /// an `import`) rather than being emitted as content; the shared `visited` set
 /// guards against cycles.
+///
+/// The matcher and the walker both root at `cwd`, not `query_dir` — see the
+/// module docs for why.
 fn apply_rules(
     rules: &Rules,
     mode: IgnoreMode,
@@ -127,13 +141,13 @@ fn apply_rules(
     cwd: &Path,
     visited: &mut BTreeSet<PathBuf>,
 ) -> Result<Vec<PathBuf>, AppError> {
-    let (patterns, root) = load_patterns(rules, query_dir, cwd)?;
-    let matcher = build_matcher(&patterns, &root)?;
+    let patterns = load_patterns(rules, query_dir)?;
+    let matcher = build_matcher(&patterns, cwd)?;
     let mut out = Vec::new();
     if matcher.is_empty() {
         return Ok(out);
     }
-    let walker = build_rules_walker(&root, mode);
+    let walker = build_rules_walker(cwd, mode);
     for entry in walker {
         let entry = entry?;
         if !entry.file_type().is_some_and(|kind| kind.is_file()) {
@@ -179,34 +193,29 @@ fn build_matcher(patterns: &[String], root: &Path) -> Result<Gitignore, AppError
         .map_err(|err| AppError::Query(format!("failed to build matcher: {err}")))
 }
 
-/// Extract pattern lines and the root directory they are relative to.
-fn load_patterns(
-    rules: &Rules,
-    query_dir: &Path,
-    cwd: &Path,
-) -> Result<(Vec<String>, PathBuf), AppError> {
+/// Extract pattern lines from `rules`. An external file is located relative to
+/// `query_dir` (like an `import`), but the returned lines are just raw
+/// pattern text — the caller (`apply_rules`) roots them at `cwd`, not at the
+/// file's own directory, regardless of which form produced them.
+fn load_patterns(rules: &Rules, query_dir: &Path) -> Result<Vec<String>, AppError> {
     match rules {
-        Rules::Inline(text) => {
-            let lines = parse_lines(text);
-            Ok((lines, query_dir.to_path_buf()))
-        }
-        Rules::List(items) => Ok((items.clone(), query_dir.to_path_buf())),
+        Rules::Inline(text) => Ok(parse_lines(text)),
+        Rules::List(items) => Ok(items.clone()),
         Rules::File { path } => {
             let abs = resolve_relative(path, query_dir);
-            check_within_cwd(&abs, cwd)?;
             let content = fs::read_to_string(&abs).map_err(|err| {
                 AppError::Query(format!("cannot read rules file `{}`: {err}", abs.display()))
             })?;
-            let root = abs
-                .parent()
-                .map_or_else(|| query_dir.to_path_buf(), Path::to_path_buf);
-            let lines = parse_lines(&content);
-            Ok((lines, root))
+            Ok(parse_lines(&content))
         }
     }
 }
 
-/// Resolve an import entry to its file set.
+/// Resolve an import entry to its file set. The import target is located
+/// relative to `query_dir` and may live outside `cwd` (trusted,
+/// config-referenced machinery, like an external rules file) — the imported
+/// query's own `rules` still root at `cwd`, so its selection stays confined
+/// regardless of where the imported file itself sits on disk.
 fn resolve_import(
     entry: &ImportEntry,
     mode: IgnoreMode,
@@ -219,7 +228,6 @@ fn resolve_import(
         ImportEntry::WithOptions { path, required } => (path.clone(), *required),
     };
     let abs = resolve_relative(&rel_path, query_dir);
-    check_within_cwd(&abs, cwd)?;
     if !abs.exists() {
         if required {
             return Err(AppError::Query(format!(
@@ -254,21 +262,6 @@ fn make_absolute(path: &Path, cwd: &Path) -> PathBuf {
 /// Resolve `rel` against `base` and normalize.
 fn resolve_relative(rel: &Path, base: &Path) -> PathBuf {
     normalize(&base.join(rel))
-}
-
-/// Lexical check: `abs_path` must stay within `cwd`. `../` that escapes is
-/// rejected.
-fn check_within_cwd(abs_path: &Path, cwd: &Path) -> Result<(), AppError> {
-    let normalized = normalize(abs_path);
-    let norm_cwd = normalize(cwd);
-    if !normalized.starts_with(&norm_cwd) {
-        return Err(AppError::Query(format!(
-            "path escapes working directory: `{}` (cwd: `{}`)",
-            normalized.display(),
-            norm_cwd.display()
-        )));
-    }
-    Ok(())
 }
 
 #[cfg(test)]

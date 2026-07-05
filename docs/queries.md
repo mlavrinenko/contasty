@@ -20,6 +20,23 @@ contasty api.cty.yaml
 This selects every file under `src/Domain/` except those under
 `src/Domain/Cart/`.
 
+## Saved queries: `@name`
+
+Drop a query file under `.contasty/queries/<name>.cty.yaml` (project) or
+`$XDG_CONFIG_HOME/contasty/queries/<name>.cty.yaml` (global, fallback
+`$HOME/.config/contasty/queries/`) and invoke it by name instead of by path:
+
+```sh
+contasty @api
+```
+
+Resolution order: project `.cty.yaml`, then `.cty.yml`, then the same two
+extensions under the global queries dir; first hit wins. A name matching
+neither is an error listing every path searched. The resolved file unfolds
+like a query file passed by path. Because `rules` root at the project you run
+against (see [Path relativity](#path-relativity)), `@name` works in any
+project regardless of where the query file itself lives.
+
 ## Schema
 
 A query file has three optional top-level keys:
@@ -82,9 +99,10 @@ rules:
   path: ./special.ignore
 ```
 
-Patterns in an external file are relative to that file's directory (like
-`.gitignore`); inline and list patterns are relative to the query file's own
-directory.
+The external file itself is located relative to the query file's own
+directory; the *patterns it contains* — like inline and list patterns — root
+at the scanned project's working directory. See
+[Path relativity](#path-relativity).
 
 ### `import`
 
@@ -136,12 +154,21 @@ Last matching pattern wins (standard gitignore precedence).
 
 ## Path relativity
 
-- **Inline / list patterns**: relative to the query file's directory.
-- **External `{ path }` rules**: relative to the external file's directory.
-- **Import paths**: relative to the importing query file's directory.
-- **`../` is allowed** in all of the above, but the resolved path must stay
-  within the working directory (the directory you run `contasty` from).
-  Escaping the working directory is an error.
+`rules` patterns — inline, list, or read from an external file — always root
+at `cwd` (the directory you run `contasty` from), never at the query file's
+own directory. A saved query under `.contasty/queries/` or the XDG global
+queries dir thus describes *the project*, not its own location, so
+`contasty @api` selects correctly in any project. At the project root run
+from the project root, the query file's directory and `cwd` coincide, so
+nothing changes from pre-rebasing behavior.
+
+- **Inline / list patterns**, and **patterns read from an external file**: root at `cwd`.
+- **The external `{ path }` file itself** and **import paths**: relative to
+  the query file's own directory; may live outside `cwd` (e.g. under
+  `.contasty/rules/` or the XDG global dir) — trusted, config-referenced
+  machinery, not sandboxed.
+- Files a query ultimately *selects* still always live under `cwd`, since the
+  rules-matching walk roots there regardless of where the query lives.
 
 CLI path arguments (non-query) are not sandboxed and may point outside the
 working directory as before.
@@ -175,11 +202,8 @@ rules:
 When `contasty` walks a directory, any `*.cty.yaml` found inside is
 automatically unfolded. If its `rules` match another `*.cty.yaml`, that file
 unfolds recursively — its selection joins the union instead of being emitted.
-
-## Cycle guard
-
-Imports and `rules` that match other query files may form cycles. The resolver
-tracks visited query files and skips duplicates, so cycles terminate without error.
+Imports and `rules` matches may form cycles this way; the resolver tracks
+visited query files and skips duplicates, so cycles terminate without error.
 
 ## Error conditions
 
@@ -188,7 +212,7 @@ tracks visited query files and skips duplicates, so cycles terminate without err
 | Broken YAML syntax             | Error   |
 | Unknown top-level key          | Error   |
 | Missing required import        | Error   |
-| Path escapes working directory | Error   |
+| Saved `@name` query not found  | Error   |
 | Malformed pattern              | Error   |
 | Missing optional import        | Skipped |
 | Cyclic import                  | Skipped |

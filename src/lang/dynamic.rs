@@ -112,17 +112,19 @@ impl FromStr for Lang {
 /// `DynamicLang` table. Idempotent: names already registered are skipped, so
 /// repeated calls (e.g. a library consumer invoking `collect` twice) are safe.
 ///
-/// `base` is the config file's directory; relative `library_path`s resolve
-/// against it. The registry is intentionally leak-on-purpose in `ast-grep`
-/// (dropping a `Library` nulls its symbols), so grammars register once and are
-/// never unloaded.
+/// Every `library_path` is already absolute — resolved by
+/// [`crate::config::Config::load`] against its own defining config file's
+/// directory (project or global) — before this ever runs, so a neutral base
+/// (`.`) satisfies `CustomLang::register`'s join with no effect. The registry
+/// is intentionally leak-on-purpose in `ast-grep` (dropping a `Library` nulls
+/// its symbols), so grammars register once and are never unloaded.
 ///
 /// # Errors
 ///
 /// [`AppError::CustomLang`] if a library is missing, exposes the wrong symbol,
 /// or was built for an incompatible tree-sitter / target — surfaced as an
 /// actionable message rather than a panic.
-pub fn register(base: &Path, languages: &HashMap<String, LangConfig>) -> Result<(), AppError> {
+pub fn register(languages: &HashMap<String, LangConfig>) -> Result<(), AppError> {
     let langs: HashMap<String, CustomLang> = languages
         .iter()
         .filter(|(name, cfg)| cfg.is_dynamic() && DynamicLang::from_str(name).is_err())
@@ -131,7 +133,7 @@ pub fn register(base: &Path, languages: &HashMap<String, LangConfig>) -> Result<
     if langs.is_empty() {
         return Ok(());
     }
-    CustomLang::register(base, langs).map_err(|err| AppError::CustomLang(err.to_string()))
+    CustomLang::register(Path::new("."), langs).map_err(|err| AppError::CustomLang(err.to_string()))
 }
 
 /// Lower a custom-grammar [`LangConfig`] onto the `ast_grep_dynamic::CustomLang`

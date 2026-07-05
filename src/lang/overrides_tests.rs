@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::config::{CompactConfig, Config};
 
 use super::*;
@@ -6,14 +8,15 @@ const STRUCT_RULE: &str =
     "language: rust\nrules:\n  - action: delete\n    rule:\n      kind: struct_item\n";
 const SRC_STRUCT_FN: &str = "struct Foo { x: i32 }\nfn add(a: i32, b: i32) -> i32 { a + b }\n";
 
-/// A `Config` whose only content is one `[languages.<lang>]` entry, rooted at
-/// `dir` so relative rule-file paths resolve against the temp directory.
-fn config_with_rule(dir: &Path, lang: &str, entry: LangConfig) -> Config {
+/// A `Config` whose only content is one `[languages.<lang>]` entry. Paths in
+/// `entry` must already be absolute — production code resolves them at
+/// `Config::load` time, so a hand-built `Config` (bypassing that step) must
+/// do the same itself.
+fn config_with_rule(lang: &str, entry: LangConfig) -> Config {
     let mut languages = HashMap::new();
     languages.insert(lang.to_owned(), entry);
     Config {
         languages,
-        base: dir.to_path_buf(),
         ..Config::default()
     }
 }
@@ -38,10 +41,9 @@ fn extend_adds_a_rule_and_keeps_builtins() {
     let dir = tempfile::tempdir().expect("tempdir");
     std::fs::write(dir.path().join("extra.yml"), STRUCT_RULE).expect("write");
     let config = config_with_rule(
-        dir.path(),
         "rust",
         LangConfig {
-            extend: Some("extra.yml".into()),
+            extend: Some(dir.path().join("extra.yml")),
             ..LangConfig::default()
         },
     );
@@ -64,10 +66,9 @@ fn override_replaces_the_whole_set() {
     let dir = tempfile::tempdir().expect("tempdir");
     std::fs::write(dir.path().join("only.yml"), STRUCT_RULE).expect("write");
     let config = config_with_rule(
-        dir.path(),
         "rust",
         LangConfig {
-            r#override: Some("only.yml".into()),
+            r#override: Some(dir.path().join("only.yml")),
             ..LangConfig::default()
         },
     );
@@ -88,11 +89,10 @@ fn override_replaces_the_whole_set() {
 fn both_extend_and_override_is_an_error() {
     let dir = tempfile::tempdir().expect("tempdir");
     let config = config_with_rule(
-        dir.path(),
         "rust",
         LangConfig {
-            extend: Some("a.yml".into()),
-            r#override: Some("b.yml".into()),
+            extend: Some(dir.path().join("a.yml")),
+            r#override: Some(dir.path().join("b.yml")),
             ..LangConfig::default()
         },
     );
@@ -114,10 +114,9 @@ fn extend_file_language_must_match_table_key() {
     )
     .expect("write");
     let config = config_with_rule(
-        dir.path(),
         "rust",
         LangConfig {
-            extend: Some("wrong.yml".into()),
+            extend: Some(dir.path().join("wrong.yml")),
             ..LangConfig::default()
         },
     );
@@ -134,10 +133,9 @@ fn extend_file_language_must_match_table_key() {
 fn unknown_language_in_rules_table_is_an_error() {
     let dir = tempfile::tempdir().expect("tempdir");
     let config = config_with_rule(
-        dir.path(),
         "nonexistent-lang",
         LangConfig {
-            extend: Some("x.yml".into()),
+            extend: Some(dir.path().join("x.yml")),
             ..LangConfig::default()
         },
     );

@@ -63,9 +63,37 @@ Examples:\n\
     #[arg(long, value_enum, default_value = "lines")]
     format: OutputFormat,
 
-    /// Path to a `contasty.toml` configuration file.
+    /// Path to a config file, overriding the project layer (default:
+    /// `.contasty/config.toml` in the current directory). Always layered over
+    /// the XDG global config (`$XDG_CONFIG_HOME/contasty/config.toml`, or
+    /// `$HOME/.config/contasty/config.toml`), which this flag does not affect.
     #[arg(long)]
     config: Option<PathBuf>,
+}
+
+/// Resolve the XDG global contasty directory: `$XDG_CONFIG_HOME/contasty` when
+/// that variable is set and non-empty, else `$HOME/.config/contasty` when
+/// `$HOME` is set and non-empty, else `None`. The only place this binary reads
+/// process environment for contasty's own configuration — the library stays
+/// pure and takes the resolved directory as a plain `Option<&Path>`.
+fn global_contasty_dir() -> Option<PathBuf> {
+    global_dir_from(
+        std::env::var_os("XDG_CONFIG_HOME"),
+        std::env::var_os("HOME"),
+    )
+}
+
+/// Pure resolution logic behind [`global_contasty_dir`], split out so it is
+/// testable without mutating process environment state.
+fn global_dir_from(
+    xdg: Option<std::ffi::OsString>,
+    home: Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    if let Some(xdg) = xdg.filter(|value| !value.is_empty()) {
+        return Some(PathBuf::from(xdg).join("contasty"));
+    }
+    home.filter(|value| !value.is_empty())
+        .map(|home| PathBuf::from(home).join(".config").join("contasty"))
 }
 
 /// Group positional paths by interleaved `--ignore` and `--strip` switches.
@@ -126,9 +154,10 @@ fn main() -> Result<()> {
     let m = Cli::command().get_matches();
     let cli = Cli::from_arg_matches(&m)?;
     let cwd = std::env::current_dir()?;
-    let config = Config::load(cli.config.as_deref(), &cwd);
+    let global_dir = global_contasty_dir();
+    let config = Config::load(cli.config.as_deref(), &cwd, global_dir.as_deref());
     let groups = path_groups(&m).map_err(|msg| anyhow::anyhow!("{msg}"))?;
-    let files = contasty::resolve(&groups, &cwd)?;
+    let files = contasty::resolve(&groups, &cwd, global_dir.as_deref())?;
     let items = contasty::collect(&files, &config)?;
     if cli.stats {
         let report = contasty::stats::compute(&items);
@@ -142,4 +171,37 @@ fn main() -> Result<()> {
         std::io::stdout().write_all(rendered.as_bytes())?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn xdg_config_home_wins_when_set() {
+        let dir = global_dir_from(Some("/xdg".into()), Some("/home/user".into()));
+        assert_eq!(dir, Some(PathBuf::from("/xdg/contasty")));
+    }
+
+    #[test]
+    fn falls_back_to_home_dot_config_when_xdg_unset() {
+        let dir = global_dir_from(None, Some("/home/user".into()));
+        assert_eq!(dir, Some(PathBuf::from("/home/user/.config/contasty")));
+    }
+
+    #[test]
+    fn empty_xdg_config_home_falls_back_to_home() {
+        let dir = global_dir_from(Some("".into()), Some("/home/user".into()));
+        assert_eq!(dir, Some(PathBuf::from("/home/user/.config/contasty")));
+    }
+
+    #[test]
+    fn none_when_neither_var_set() {
+        assert_eq!(global_dir_from(None, None), None);
+    }
+
+    #[test]
+    fn none_when_home_is_empty_and_xdg_unset() {
+        assert_eq!(global_dir_from(None, Some("".into())), None);
+    }
 }

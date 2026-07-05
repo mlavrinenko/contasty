@@ -48,11 +48,13 @@ groups:
     dependents:
       - docs/queries.md
 
-  # User-extensible / overridable rule sets loaded from contasty.toml are
-  # documented in docs/custom-rules.md.
+  # User-extensible / overridable rule sets loaded from .contasty/config.toml
+  # (project) and the XDG global config.toml are documented in
+  # docs/custom-rules.md.
   - name: custom-rules-docs
     source:
-      - src/config.rs
+      - src/config/mod.rs
+      - src/config/load.rs
       - src/lang/overrides.rs
     dependents:
       - docs/custom-rules.md

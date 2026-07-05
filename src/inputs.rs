@@ -1,5 +1,6 @@
-//! Input resolution: classify each path argument (file, folder, or glob) and
-//! unfold it to a deduped, sorted set of source files for the strip pipeline.
+//! Input resolution: classify each path argument (file, folder, glob, or
+//! `@name`) and unfold it to a deduped, sorted set of source files for the
+//! strip pipeline.
 //!
 //! Each path argument carries an [`IgnoreMode`] that controls `.gitignore`
 //! filtering and the CLI group's strip selection (`Option<StripSet>`; `None`
@@ -7,6 +8,10 @@
 //! walked gitignore-aware; globs are expanded internally; query files
 //! (`*.cty.{yaml,yml}`) unfold to their selected source files, contributing a
 //! [`FileStrip`] that pairs the group's CLI strip with the query's own strip.
+//! An argument of the form `@name` names a saved query: it resolves to
+//! `<project>/.contasty/queries/<name>.cty.yaml` (then `.cty.yml`), else
+//! `<global>/queries/<name>.cty.yaml` (then `.yml`), first hit wins, and then
+//! unfolds exactly like a query file passed by path.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
@@ -39,20 +44,23 @@ pub enum IgnoreMode {
 /// with per-file strip inputs ([`FileStrip`]).
 ///
 /// When the same file appears in multiple groups, the last group's strip wins
-/// (find-style last-wins dedup).
+/// (find-style last-wins dedup). `global_dir` is the resolved XDG global
+/// contasty directory (`None` when unset), consulted only for `@name`
+/// saved-query lookups.
 ///
 /// # Errors
 ///
-/// [`AppError::Input`] when a named path does not exist or a glob is
-/// malformed. [`AppError::Walk`] from the walker. [`AppError::Query`]
-/// from query file resolution.
+/// [`AppError::Input`] when a named path does not exist, a glob is malformed,
+/// or a saved `@name` query is not found. [`AppError::Walk`] from the walker.
+/// [`AppError::Query`] from query file resolution.
 pub fn resolve(
     args: &[(PathBuf, IgnoreMode, Option<StripSet>)],
     cwd: &Path,
+    global_dir: Option<&Path>,
 ) -> Result<Vec<(PathBuf, FileStrip)>, AppError> {
     let default = [(PathBuf::from("."), IgnoreMode::Enable, None)];
     let args = if args.is_empty() { &default[..] } else { args };
-    let mut resolver = Resolver::new(cwd);
+    let mut resolver = Resolver::new(cwd, global_dir);
     for (arg, mode, cli) in args {
         resolver.resolve_one(arg, *mode, *cli)?;
     }
@@ -60,17 +68,20 @@ pub fn resolve(
 }
 
 /// Accumulating context for a single `resolve` call: the working directory,
-/// the query-file cycle guard, and the deduped output map.
+/// the XDG global directory (for `@name` lookups), the query-file cycle
+/// guard, and the deduped output map.
 struct Resolver<'cwd> {
     cwd: &'cwd Path,
+    global_dir: Option<PathBuf>,
     visited: BTreeSet<PathBuf>,
     out: BTreeMap<PathBuf, FileStrip>,
 }
 
 impl<'cwd> Resolver<'cwd> {
-    fn new(cwd: &'cwd Path) -> Self {
+    fn new(cwd: &'cwd Path, global_dir: Option<&Path>) -> Self {
         Self {
             cwd,
+            global_dir: global_dir.map(Path::to_path_buf),
             visited: BTreeSet::new(),
             out: BTreeMap::new(),
         }
@@ -82,6 +93,10 @@ impl<'cwd> Resolver<'cwd> {
         mode: IgnoreMode,
         cli: Option<StripSet>,
     ) -> Result<(), AppError> {
+        if let Some(name) = named_query(arg) {
+            let resolved = self.resolve_named_query(name)?;
+            return self.add_or_unfold(&resolved, mode, cli);
+        }
         if is_glob(arg) {
             self.expand_glob(arg, mode, cli)
         } else if arg.is_dir() {
@@ -94,6 +109,38 @@ impl<'cwd> Resolver<'cwd> {
                 arg.display()
             )))
         }
+    }
+
+    /// Resolve `@name` to a saved query file: project queries first
+    /// (`.cty.yaml` then `.cty.yml`, under `<cwd>/.contasty/queries/`), then
+    /// the global queries dir in the same order. First hit wins.
+    fn resolve_named_query(&self, name: &str) -> Result<PathBuf, AppError> {
+        let mut candidates = vec![
+            self.cwd
+                .join(".contasty/queries")
+                .join(format!("{name}.cty.yaml")),
+            self.cwd
+                .join(".contasty/queries")
+                .join(format!("{name}.cty.yml")),
+        ];
+        if let Some(global) = &self.global_dir {
+            candidates.push(global.join("queries").join(format!("{name}.cty.yaml")));
+            candidates.push(global.join("queries").join(format!("{name}.cty.yml")));
+        }
+        candidates
+            .iter()
+            .find(|path| path.is_file())
+            .cloned()
+            .ok_or_else(|| {
+                let searched = candidates
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                AppError::Input(format!(
+                    "saved query `@{name}` not found; searched: {searched}"
+                ))
+            })
     }
 
     /// Add a regular file or unfold a query file into the output set.
@@ -240,6 +287,11 @@ impl<'cwd> Resolver<'cwd> {
         }
         Ok(())
     }
+}
+
+/// A saved-query reference: the whole argument is `@` plus the query name.
+fn named_query(arg: &Path) -> Option<&str> {
+    arg.to_str()?.strip_prefix('@')
 }
 
 /// True when any component carries a glob metacharacter.

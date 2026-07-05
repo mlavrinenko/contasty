@@ -231,7 +231,8 @@ fn cli_query_file_unfolds_to_selected_files() {
 
     Command::cargo_bin("contasty")
         .expect("binary")
-        .arg(tmp.path().join("api.cty.yaml"))
+        .current_dir(tmp.path())
+        .arg("api.cty.yaml")
         .assert()
         .success()
         .stdout(contains("a.rs"))
@@ -253,7 +254,8 @@ fn cli_query_file_negation_excludes() {
 
     Command::cargo_bin("contasty")
         .expect("binary")
-        .arg(tmp.path().join("q.cty.yaml"))
+        .current_dir(tmp.path())
+        .arg("q.cty.yaml")
         .assert()
         .success()
         .stdout(contains("keep.rs"))
@@ -351,7 +353,8 @@ fn cli_query_ignore_field_wins() {
 
     Command::cargo_bin("contasty")
         .expect("binary")
-        .arg(tmp.path().join("gen.cty.yaml"))
+        .current_dir(tmp.path())
+        .arg("gen.cty.yaml")
         .assert()
         .success()
         .stdout(contains("foo.rs"));

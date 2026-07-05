@@ -4,7 +4,6 @@
 //! `Language`'s private rule storage without widening its visibility.
 
 use std::collections::HashMap;
-use std::path::Path;
 use std::str::FromStr;
 
 use crate::AppError;
@@ -18,7 +17,9 @@ impl Registry {
     /// that sets one (entries with neither are skipped). `extend` appends the
     /// user file's compiled rules (so they run after the built-ins); `override`
     /// replaces the language's set outright. An override of a dynamic grammar
-    /// swaps its declared rule file for the user file's.
+    /// swaps its declared rule file for the user file's. Both paths are already
+    /// absolute — resolved by [`crate::config::Config::load`] against their own
+    /// defining config file's directory — so no shared base is needed here.
     ///
     /// # Errors
     ///
@@ -29,7 +30,6 @@ impl Registry {
     pub(super) fn apply_overrides(
         &mut self,
         languages: &HashMap<String, LangConfig>,
-        base: &Path,
     ) -> Result<(), AppError> {
         for (name, entry) in languages {
             let (path, replace) = match entry
@@ -40,7 +40,6 @@ impl Registry {
                 Some(RuleSource::Extend(path)) => (path, false),
                 Some(RuleSource::Override(path)) => (path, true),
             };
-            let full = base.join(path);
             let target = self
                 .langs
                 .iter_mut()
@@ -51,8 +50,8 @@ impl Registry {
                     ))
                 })?;
             let lang = target.lang;
-            let yaml = std::fs::read_to_string(&full).map_err(|err| {
-                AppError::Config(format!("languages.{name}: `{}`: {err}", full.display()))
+            let yaml = std::fs::read_to_string(path).map_err(|err| {
+                AppError::Config(format!("languages.{name}: `{}`: {err}", path.display()))
             })?;
             let file: RuleFile = serde_yaml::from_str(&yaml)?;
             // `language:` is required by the schema; it must name the table key's
